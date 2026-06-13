@@ -1,0 +1,43 @@
+[package]
+name = "xhh-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "小黑盒 (xiaoheihe.cn) Web API 核心库 — hkey 签名、扫码登录、发帖/评论/点赞/收藏/COS 上传"
+
+[lib]
+name = "xhh_core"
+path = "src/lib.rs"
+
+[dependencies]
+tokio = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+md-5 = { workspace = true }
+sha2 = { workspace = true }
+sha1 = { workspace = true }
+hmac = { workspace = true }
+base64 = { workspace = true }
+hex = { workspace = true }
+form_urlencoded = { workspace = true }
+url = { workspace = true }
+chrono = { workspace = true }
+rand = { workspace = true }
+uuid = { workspace = true }
+directories = { workspace = true }
+qrcode = { workspace = true }
+image = { workspace = true }
+utoipa = { workspace = true, optional = true }
+
+[features]
+default = []
+# 启用 OpenAPI Schema（utoipa::ToSchema derive），被 xhh-http crate 引用
+schema = ["dep:utoipa"]

@@ -1,0 +1,51 @@
+name: Release
+
+# 触发条件：推送 v* 开头的 tag，或手动运行
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build (Windows x64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: crates/xhh-app/frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: crates/xhh-app/frontend
+
+      - name: Build and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: crates/xhh-app
+          tagName: ${{ github.ref_name }}
+          releaseName: '黑盒工坊 ${{ github.ref_name }}'
+          releaseBody: |
+            下载下方 `.exe` 安装程序运行即可完成安装。
+
+            详情与使用说明见 [README](https://github.com/Sakura520222/xhh-workshop#readme)。
+          releaseDraft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}

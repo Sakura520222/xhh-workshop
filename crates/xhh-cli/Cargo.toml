@@ -1,0 +1,30 @@
+[package]
+name = "xhh-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "小黑盒 Web API 命令行工具"
+
+[[bin]]
+name = "xhh"
+path = "src/main.rs"
+
+[dependencies]
+xhh-core = { workspace = true }
+xhh-agent = { workspace = true }
+xhh-http = { path = "../xhh-http" }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+clap = { workspace = true }
+chrono = { workspace = true }
+qrcode = { workspace = true }
+axum = { workspace = true }

@@ -1,0 +1,37 @@
+[package]
+name = "xhh-http"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "小黑盒本地 HTTP REST 服务，复用 xhh-core / xhh-agent"
+
+[[bin]]
+name = "xhh-serve"
+path = "src/main.rs"
+
+[lib]
+name = "xhh_http"
+path = "src/lib.rs"
+
+[dependencies]
+xhh-core = { workspace = true, features = ["schema"] }
+xhh-agent = { workspace = true, features = ["schema"] }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+utoipa = { workspace = true }
+utoipa-swagger-ui = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true }

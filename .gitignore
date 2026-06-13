@@ -1,0 +1,39 @@
+# Node.js / 前端
+node_modules/
+.svelte-kit/
+.vite/
+crates/xhh-app/frontend/dist/
+*.tsbuildinfo
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Rust
+target/
+**/*.rs.bk
+
+# 环境变量与本地配置
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Project specific
+.codegraph/
+.code-review-graph/
+.playwright-mcp/
+CLAUDE.md
+AGENTS.md
+xiaoheihe-api.md
+日志.log

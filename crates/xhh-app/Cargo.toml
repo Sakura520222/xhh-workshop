@@ -1,0 +1,39 @@
+[package]
+name = "xhh-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "小黑盒第三方桌面客户端（Tauri）"
+
+[lib]
+name = "xhh_app_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[[bin]]
+name = "xhh-app"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { workspace = true, features = [] }
+
+[dependencies]
+xhh-core = { workspace = true }
+xhh-agent = { workspace = true }
+tauri = { workspace = true, features = [] }
+rfd = "0.15"
+tauri-plugin-shell = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+window-vibrancy = { workspace = true }
+tracing = { workspace = true }
+reqwest = { workspace = true }
+base64 = { workspace = true }
+chrono = { workspace = true }
+directories = { workspace = true }
+image = "0.25"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

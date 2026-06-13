@@ -1,0 +1,34 @@
+[package]
+name = "xhh-agent"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "小黑盒 Agent 模块 — LLM 驱动的自动发帖/回复评论/点赞"
+
+[lib]
+name = "xhh_agent"
+path = "src/lib.rs"
+
+[dependencies]
+xhh-core = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+directories = { workspace = true }
+uuid = { workspace = true }
+async-trait = { workspace = true }
+image = { workspace = true }
+utoipa = { workspace = true, optional = true }
+
+[features]
+default = []
+schema = ["dep:utoipa", "xhh-core/schema"]

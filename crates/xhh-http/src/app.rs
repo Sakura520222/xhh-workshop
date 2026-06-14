@@ -16,7 +16,7 @@ use crate::state::AppState;
 #[openapi(
     info(
         title = "小黑盒本地 API",
-        version = "0.1.0",
+        version = "0.1.1",
         description = "xhh-http 提供：扫码登录、发帖、评论、点赞、收藏、搜索、Agent 调用。
 完整端点见源码 crates/xhh-http/src/routes/，以下为关键端点示例。"
     ),

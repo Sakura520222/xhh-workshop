@@ -6793,7 +6793,7 @@ dependencies = [
 
 [[package]]
 name = "xhh-agent"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6813,7 +6813,7 @@ dependencies = [
 
 [[package]]
 name = "xhh-app"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -6835,7 +6835,7 @@ dependencies = [
 
 [[package]]
 name = "xhh-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -6855,7 +6855,7 @@ dependencies = [
 
 [[package]]
 name = "xhh-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -6883,7 +6883,7 @@ dependencies = [
 
 [[package]]
 name = "xhh-http"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "axum",

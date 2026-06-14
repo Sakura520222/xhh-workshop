@@ -101,8 +101,9 @@ function persistFeeds(feeds: any[]) {
   } catch { /* ignore */ }
 }
 
-let _feedsCache = $state<any[]>(loadPersistedFeeds());
-let _feedsLoaded = $state(_feedsCache.length > 0);
+const initialFeeds = loadPersistedFeeds();
+let _feedsCache = $state<any[]>(initialFeeds);
+let _feedsLoaded = $state(initialFeeds.length > 0);
 
 export function getFeedsCache() {
   return _feedsCache;

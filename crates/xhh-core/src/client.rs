@@ -76,8 +76,10 @@ impl XhhClient {
 
     /// 仅创建匿名客户端（未登录场景，如获取二维码）
     pub fn anonymous(device_id: Option<String>) -> Result<Self> {
-        let mut cfg = Config::default();
-        cfg.device_id = device_id.unwrap_or_else(|| uuid::Uuid::new_v4().simple().to_string());
+        let cfg = Config {
+            device_id: device_id.unwrap_or_else(|| uuid::Uuid::new_v4().simple().to_string()),
+            ..Default::default()
+        };
         Self::new(cfg)
     }
 
@@ -211,10 +213,12 @@ mod tests {
 
     #[test]
     fn client_with_existing_config() {
-        let mut cfg = Config::default();
-        cfg.heybox_id = "1".into();
-        cfg.device_id = "abc".into();
-        cfg.cookie = "pkey=x".into();
+        let cfg = Config {
+            heybox_id: "1".into(),
+            device_id: "abc".into(),
+            cookie: "pkey=x".into(),
+            ..Default::default()
+        };
         let c = XhhClient::new(cfg.clone()).unwrap();
         assert_eq!(c.heybox_id, "1");
         assert_eq!(c.device_id, "abc");

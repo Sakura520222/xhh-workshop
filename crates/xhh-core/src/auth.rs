@@ -312,17 +312,18 @@ pub async fn extract_credentials_from_response(resp: reqwest::Response) -> Resul
 /// `user_pkey=...; user_heybox_id=...; x_xhh_tokenid=...`
 pub fn build_login_config(pkey: &str, heybox_id: &str, nickname: &str) -> Config {
     let token_id = generate_token_id();
-    let mut cfg = Config::default();
-    cfg.pkey = pkey.into();
-    cfg.heybox_id = heybox_id.into();
-    cfg.nickname = nickname.into();
-    cfg.x_xhh_tokenid = token_id.clone();
-    cfg.login_time = chrono::Utc::now().timestamp();
-    cfg.cookie = format!(
-        "user_pkey={}; user_heybox_id={}; x_xhh_tokenid={}",
-        pkey, heybox_id, token_id
-    );
-    cfg
+    Config {
+        pkey: pkey.into(),
+        heybox_id: heybox_id.into(),
+        nickname: nickname.into(),
+        x_xhh_tokenid: token_id.clone(),
+        login_time: chrono::Utc::now().timestamp(),
+        cookie: format!(
+            "user_pkey={}; user_heybox_id={}; x_xhh_tokenid={}",
+            pkey, heybox_id, token_id
+        ),
+        ..Default::default()
+    }
 }
 
 /// 阻塞式（异步但自包含）的完整登录流程，CLI 用

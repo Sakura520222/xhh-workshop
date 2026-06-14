@@ -435,7 +435,7 @@
   <div class="topbar">
     <button class="back-btn" onclick={back}>返回</button>
     <span class="topbar-title">帖子详情</span>
-    <button class="ai-btn" onclick={() => aiPanel = !aiPanel} class:active={aiPanel} disabled={!post}>
+    <button class="ai-btn" aria-label="AI 助手" onclick={() => aiPanel = !aiPanel} class:active={aiPanel} disabled={!post}>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M8 1l1.5 3.5L13 6l-3.5 1.5L8 11l-1.5-3.5L3 6l3.5-1.5z"/>
         <path d="M12.5 9.5l.75 1.75L15 12l-1.75.75L12.5 14.5l-.75-1.75L10 12l1.75-.75z"/>
@@ -572,7 +572,14 @@
                       <div class="c-imgs">
                         {#each root.imgs as img}
                           {@const rootImgUrl = img.url ?? img.thumb}
-                          <img src={rootImgUrl} alt="" class="c-img clickable-img" onclick={() => openViewer(rootImgUrl, root.imgs.map((i: any) => i.url ?? i.thumb))} />
+                          <button
+                            type="button"
+                            class="c-img-btn"
+                            aria-label="查看图片"
+                            onclick={() => openViewer(rootImgUrl, root.imgs.map((i: any) => i.url ?? i.thumb))}
+                          >
+                            <img src={rootImgUrl} alt="" class="c-img" />
+                          </button>
                         {/each}
                       </div>
                     {/if}
@@ -597,7 +604,14 @@
                         <div class="c-imgs">
                           {#each sub.imgs as img}
                             {@const subImgUrl = img.url ?? img.thumb}
-                            <img src={subImgUrl} alt="" class="c-img clickable-img" onclick={() => openViewer(subImgUrl, sub.imgs.map((i: any) => i.url ?? i.thumb))} />
+                            <button
+                              type="button"
+                              class="c-img-btn"
+                              aria-label="查看图片"
+                              onclick={() => openViewer(subImgUrl, sub.imgs.map((i: any) => i.url ?? i.thumb))}
+                            >
+                              <img src={subImgUrl} alt="" class="c-img" />
+                            </button>
                           {/each}
                         </div>
                       {/if}
@@ -611,7 +625,13 @@
                   </div>
                 {/each}
                 {#if root.has_more === 1 && !expandedRoots.has(String(rootId))}
-                  <div class="expand-btn" onclick={() => expandSubComments(String(rootId), floorIdx)}>
+                  <div
+                    class="expand-btn"
+                    role="button"
+                    tabindex="0"
+                    onclick={() => expandSubComments(String(rootId), floorIdx)}
+                    onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); expandSubComments(String(rootId), floorIdx); } }}
+                  >
                     {loadingSubs.has(String(rootId)) ? "加载中..." : "展开更多回复"}
                   </div>
                 {/if}
@@ -663,6 +683,7 @@
       tabindex="0"
     >
       <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
       <img
         src={viewerUrl}
         alt=""
@@ -672,6 +693,7 @@
         onwheel={handleViewerWheel}
         class:dragging={viewerDragging}
       />
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
       <div class="viewer-actions" onclick={(e) => e.stopPropagation()}>
         {#if viewerIndex > 0}
           <button class="viewer-btn" onclick={viewerPrev}>上一张</button>
@@ -796,7 +818,7 @@
     color: var(--text);
     margin-bottom: 8px;
   }
-  .post-html img {
+  .post-html :global(img) {
     max-width: 100%;
     max-height: 500px;
     object-fit: contain;
@@ -804,7 +826,7 @@
     margin: 8px 0;
     display: block;
   }
-  .post-html p {
+  .post-html :global(p) {
     margin: 0 0 8px;
   }
   .selectable {
@@ -992,10 +1014,17 @@
     margin-bottom: 6px;
   }
   .c-img {
+    display: block;
     max-width: 200px;
     max-height: 200px;
     object-fit: cover;
     border-radius: 8px;
+  }
+  .c-img-btn {
+    padding: 0;
+    border: 0;
+    background: none;
+    line-height: 0;
     cursor: zoom-in;
   }
   .c-meta {
@@ -1160,13 +1189,6 @@
   .sentinel {
     height: 1px;
   }
-  .emoji {
-    width: 1em;
-    height: 1em;
-    vertical-align: middle;
-    display: inline-block;
-    margin: 0 1px;
-  }
   .post-content :global(.emoji),
   .post-content p :global(.emoji) {
     width: 1em;
@@ -1179,30 +1201,30 @@
     width: 1em;
     height: 1em;
   }
-  .md-code {
+  .ai-result :global(.md-code) {
     padding: 2px 6px;
     border-radius: 4px;
     background: rgba(255, 255, 255, 0.1);
     font-size: 13px;
     font-family: monospace;
   }
-  .md-code-block {
+  .ai-result :global(.md-code-block) {
     padding: 12px 16px;
     border-radius: 8px;
     background: rgba(0, 0, 0, 0.3);
     overflow-x: auto;
     margin: 8px 0;
   }
-  .md-code-block code {
+  .ai-result :global(.md-code-block code) {
     font-size: 13px;
     font-family: monospace;
     line-height: 1.6;
   }
-  .md-link {
+  .ai-result :global(.md-link) {
     color: var(--accent);
     text-decoration: none;
   }
-  .md-link:hover {
+  .ai-result :global(.md-link:hover) {
     text-decoration: underline;
   }
   .ai-btn {

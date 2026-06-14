@@ -248,7 +248,7 @@ pub async fn upload_image_bytes(
     };
 
     // Step 1
-    let upload_info = get_upload_info(client, &[(info.clone())]).await?;
+    let upload_info = get_upload_info(client, std::slice::from_ref(&info)).await?;
     let returned_key = upload_info
         .keys
         .first()
@@ -256,14 +256,15 @@ pub async fn upload_image_bytes(
         .clone();
 
     // Step 2
-    let creds_resp = get_upload_token(client, &[returned_key.clone()], &[mimetype.into()]).await?;
+    let creds_resp =
+        get_upload_token(client, std::slice::from_ref(&returned_key), &[mimetype.into()]).await?;
     let creds = &creds_resp.credentials;
 
     // Step 3
     put_to_cos(client, creds, &returned_key, bytes, mimetype).await?;
 
     // Step 4
-    let cb = callback(client, &[returned_key.clone()]).await?;
+    let cb = callback(client, std::slice::from_ref(&returned_key)).await?;
     tracing::debug!(preview_urls = ?cb.preview_urls, thumbs = ?cb.thumbs, "上传回调完成");
     let preview_url = cb
         .preview_urls

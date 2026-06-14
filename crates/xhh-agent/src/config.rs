@@ -217,9 +217,11 @@ mod tests {
 
     #[test]
     fn build_provider_ollama_default() {
-        let mut cfg = AgentConfig::default();
-        cfg.active_provider = "ollama".into();
-        cfg.ollama = Some(OllamaCfg::default());
+        let cfg = AgentConfig {
+            active_provider: "ollama".into(),
+            ollama: Some(OllamaCfg::default()),
+            ..Default::default()
+        };
         let kind = cfg.build_provider_config().unwrap();
         match kind {
             ProviderKind::Ollama(c) => {

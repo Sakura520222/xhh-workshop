@@ -298,8 +298,8 @@ impl Tool for CreatePostTool {
         Ok(json!({
             "ok": true,
             "link_id": link_id,
-            "message": if link_id.is_some() {
-                format!("发帖成功，link_id={}", link_id.unwrap())
+            "message": if let Some(id) = link_id {
+                format!("发帖成功，link_id={}", id)
             } else {
                 "发帖成功（服务端未返回 link_id，请通过 search_feeds 或我的帖子列表确认）".to_string()
             },

@@ -1773,7 +1773,7 @@ pub async fn save_image(url: String, title: Option<String>) -> Result<String, St
         _ => {
             let raw = url
                 .split('/')
-                .last()
+                .next_back()
                 .unwrap_or("image.jpg")
                 .split('?')
                 .next()
@@ -1835,7 +1835,7 @@ pub async fn upload_image(state: State<'_, AppState>) -> Result<serde_json::Valu
     let (width, height) =
         match image::ImageReader::new(std::io::Cursor::new(&bytes)).with_guessed_format() {
             Ok(reader) => {
-                let dims: Option<(u32, u32)> = reader.into_dimensions().ok().map(|(w, h)| (w, h));
+                let dims: Option<(u32, u32)> = reader.into_dimensions().ok();
                 dims.unwrap_or((800, 600))
             }
             Err(_) => (800, 600),

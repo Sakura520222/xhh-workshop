@@ -105,7 +105,13 @@
     {:else}
       <div class="post-list">
         {#each posts as p}
-          <div class="post-item" onclick={() => openPost(String(p.linkid))}>
+          <div
+            class="post-item"
+            role="button"
+            tabindex="0"
+            onclick={() => openPost(String(p.linkid))}
+            onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPost(String(p.linkid)); } }}
+          >
             <div class="post-title">{p.title ?? ""}</div>
             <div class="post-meta">
               <span>{p.comment_num ?? 0} 评论</span>

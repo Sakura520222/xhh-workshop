@@ -5,21 +5,16 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 /// 窗口背景效果
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum WindowEffect {
     /// 无效果
     None,
     /// 云母（Win11 22H2+）
+    #[default]
     Mica,
     /// 亚克力
     Acrylic,
-}
-
-impl Default for WindowEffect {
-    fn default() -> Self {
-        Self::Mica
-    }
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]

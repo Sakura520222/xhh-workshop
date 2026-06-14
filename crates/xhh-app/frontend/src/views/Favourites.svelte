@@ -210,7 +210,13 @@
     {:else}
       <div class="post-list">
         {#each posts as p}
-          <div class="post-item" onclick={() => openPost(p.linkid)}>
+          <div
+            class="post-item"
+            role="button"
+            tabindex="0"
+            onclick={() => openPost(p.linkid)}
+            onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPost(p.linkid); } }}
+          >
             <div class="post-title">{p.title || "(无标题)"}</div>
             <div class="post-footer">
               <div class="post-meta">
@@ -244,7 +250,13 @@
     {:else}
       <div class="post-list">
         {#each allFavPosts as p}
-          <div class="post-item" onclick={() => openPost(p.linkid)}>
+          <div
+            class="post-item"
+            role="button"
+            tabindex="0"
+            onclick={() => openPost(p.linkid)}
+            onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPost(p.linkid); } }}
+          >
             <div class="post-title">{p.title || "(无标题)"}</div>
             <div class="post-footer">
               <div class="post-meta">
@@ -417,6 +429,7 @@
     overflow: hidden;
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
   }
   .post-footer {

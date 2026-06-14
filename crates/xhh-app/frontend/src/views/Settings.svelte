@@ -26,7 +26,6 @@
   let ollamaBaseUrl = $state("");
   // 通用
   let maxLoops = $state(8);
-  let maxPerDay = $state(10);
   let temperature = $state("");
 
   let currentTheme = $derived(getTheme());
@@ -59,7 +58,6 @@
         ollamaBaseUrl = cfg.ollama.base_url ?? "";
       }
       maxLoops = cfg.max_loops ?? 8;
-      maxPerDay = cfg.max_per_day ?? 10;
       temperature = cfg.temperature != null ? String(cfg.temperature) : "";
     } catch (e) {
       error = String(e);
@@ -91,7 +89,6 @@
           base_url: ollamaBaseUrl,
         },
         max_loops: maxLoops,
-        max_per_day: maxPerDay,
         temperature: temperature !== "" ? Number(temperature) : null,
       };
       await agentSaveConfig(cfg);
@@ -205,15 +202,9 @@
       <!-- 通用参数 -->
       <section class="section">
         <h3 class="section-title">通用参数</h3>
-        <div class="row">
-          <div class="field-group half">
-            <label class="label">最大循环轮数</label>
-            <input type="number" bind:value={maxLoops} class="input" min="1" max="50" />
-          </div>
-          <div class="field-group half">
-            <label class="label">每日调用上限</label>
-            <input type="number" bind:value={maxPerDay} class="input" min="1" max="1000" />
-          </div>
+        <div class="field-group">
+          <label class="label">最大循环轮数</label>
+          <input type="number" bind:value={maxLoops} class="input" min="1" max="50" />
         </div>
         <div class="field-group">
           <label class="label">Temperature (0-2，留空用默认)</label>

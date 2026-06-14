@@ -18,7 +18,7 @@ use tokio::time::sleep;
 
 use xhh_core::client::XhhClient;
 
-use crate::config::{AgentConfig, DailyCounters};
+use crate::config::AgentConfig;
 use crate::error::{Error, Result};
 use crate::prompt;
 use crate::provider::{
@@ -120,17 +120,12 @@ pub struct AgentRunner {
     tools: ToolRegistry,
     client: XhhClient,
     config: AgentConfig,
-    counters: DailyCounters,
     confirmation_handler: Box<dyn ToolConfirmationHandler>,
 }
 
 impl AgentRunner {
     /// 从配置构建（最常用入口）
-    pub fn from_config(
-        config: AgentConfig,
-        counters: DailyCounters,
-        client: XhhClient,
-    ) -> Result<Self> {
+    pub fn from_config(config: AgentConfig, client: XhhClient) -> Result<Self> {
         let provider_kind = config.build_provider_config()?;
         let provider: Box<dyn LlmProvider> = match &provider_kind {
             crate::config::ProviderKind::OpenAi(c) => {
@@ -164,7 +159,6 @@ impl AgentRunner {
             tools,
             client,
             config,
-            counters,
             confirmation_handler,
         })
     }
@@ -175,14 +169,12 @@ impl AgentRunner {
         tools: ToolRegistry,
         client: XhhClient,
         config: AgentConfig,
-        counters: DailyCounters,
     ) -> Self {
         Self {
             provider,
             tools,
             client,
             config,
-            counters,
             confirmation_handler: Box::new(StdinConfirmationHandler),
         }
     }
@@ -197,7 +189,6 @@ impl AgentRunner {
 
     /// 通用聊天（不预设场景，由用户消息驱动）
     pub async fn chat(&mut self, user_message: &str) -> Result<AgentResult> {
-        self.consume_quota().await?;
         let mut messages = vec![
             ChatMessage::system(prompt::SYSTEM_PROMPT),
             ChatMessage::user(user_message),
@@ -220,7 +211,6 @@ impl AgentRunner {
 
     /// 一键自动发帖（用户给主题，LLM 生成并发出）
     pub async fn auto_post(&mut self, topic: &str, hashtags: &[String]) -> Result<AgentResult> {
-        self.consume_quota().await?;
         let user_msg = prompt::build_auto_post_prompt(topic, hashtags);
         let mut messages = vec![
             ChatMessage::system(prompt::SYSTEM_PROMPT),
@@ -235,7 +225,6 @@ impl AgentRunner {
         link_id: &str,
         post_summary: &str,
     ) -> Result<AgentResult> {
-        self.consume_quota().await?;
         let mut user_msg = prompt::build_auto_reply_prompt(post_summary);
         user_msg.push_str(&format!("\n\n目标帖子 link_id: {}", link_id));
         let mut messages = vec![
@@ -243,28 +232,6 @@ impl AgentRunner {
             ChatMessage::user(user_msg),
         ];
         self.run_loop(&mut messages).await
-    }
-
-    /// 消费一次配额
-    ///
-    /// - 用户自配置的 Provider（`quota_enforced=false`）：完全跳过，不检查、不计数、不写入
-    /// - 后端 AI 服务（`quota_enforced=true`）：按"Agent 会话"计数（每会话 1 次，而非每个工具调用 1 次）
-    async fn consume_quota(&mut self) -> Result<()> {
-        if !self.config.quota_enforced {
-            tracing::debug!("配额未启用，跳过检查");
-            return Ok(());
-        }
-        self.counters.check_limit(self.config.max_per_day)?;
-        tracing::debug!(
-            used = self.counters.count,
-            max = self.config.max_per_day,
-            "配额检查通过"
-        );
-        if !self.config.dry_run {
-            self.counters.increment();
-            let _ = self.counters.save(None);
-        }
-        Ok(())
     }
 
     /// 主循环
@@ -381,14 +348,5 @@ impl AgentRunner {
             "message": format!("用户拒绝执行危险操作 {}", tool_name),
         })
         .to_string()
-    }
-
-    /// 获取当前配额剩余（当 `quota_enforced=false` 时返回 `None`）
-    pub fn remaining_quota(&self) -> Option<u32> {
-        if self.config.quota_enforced {
-            Some(self.counters.remaining(self.config.max_per_day))
-        } else {
-            None
-        }
     }
 }

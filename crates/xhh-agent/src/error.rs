@@ -16,9 +16,6 @@ pub enum Error {
     #[error("工具 {0} 不存在")]
     ToolNotFound(String),
 
-    #[error("Agent 已达到每日调用上限 ({0})")]
-    DailyLimitReached(u32),
-
     #[error("Agent 达到最大循环次数 ({0})")]
     MaxLoopExceeded(u32),
 

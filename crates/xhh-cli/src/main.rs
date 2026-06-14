@@ -165,28 +165,17 @@ enum AgentCmd {
         #[arg(long, default_value = "http://localhost:11434")]
         base_url: String,
     },
-    /// 设置每日调用上限与最大循环次数
+    /// 设置最大循环次数与运行选项
     SetLimits {
-        #[arg(long)]
-        max_per_day: Option<u32>,
         #[arg(long)]
         max_loops: Option<u32>,
         #[arg(long, help = "试运行模式（不实际调用工具）")]
         dry_run: bool,
-        #[arg(
-            long,
-            help = "启用配额计费（默认 false，用户自配置的 Provider 不消耗配额；仅后端 AI 服务需要时启用）"
-        )]
-        enforce_quota: bool,
         #[arg(long, help = "禁用 Agent 危险工具执行前确认")]
         no_confirm_dangerous_tools: bool,
     },
-    /// 重置今日配额计数
-    ResetQuota,
     /// 设置温度（0-2，留空表示用 provider 默认）
     SetTemperature { value: Option<f32> },
-    /// 查看今日剩余配额
-    Quota,
     /// 一键自动发帖（LLM 生成标题+正文+话题，然后调用 create_post）
     AutoPost {
         topic: String,
@@ -464,7 +453,7 @@ async fn run(cli: Cli) -> Result<()> {
 // ─── Agent 命令处理 ──────────────────────────────────────
 
 async fn agent_repl(cfg_path: &Option<PathBuf>) -> Result<()> {
-    use xhh_agent::config::{AgentConfig, DailyCounters};
+    use xhh_agent::config::AgentConfig;
     use xhh_agent::prompt;
     use xhh_agent::provider::ChatMessage;
     use xhh_agent::runner::AgentRunner;
@@ -475,8 +464,7 @@ async fn agent_repl(cfg_path: &Option<PathBuf>) -> Result<()> {
     }
     let ac = AgentConfig::load(None).context("读取 agent 配置失败")?;
     let client = XhhClient::new(cfg).context("构建 HTTP 客户端失败")?;
-    let counters = DailyCounters::load(None)?;
-    let mut runner = AgentRunner::from_config(ac, counters, client)
+    let mut runner = AgentRunner::from_config(ac, client)
         .context("构建 Agent 失败")?
         .with_confirmation_handler(Box::new(xhh_agent::runner::StdinConfirmationHandler));
 
@@ -590,33 +578,20 @@ async fn handle_agent(cmd: AgentCmd, _cfg_path: &Option<PathBuf>) -> Result<()> 
         }
 
         AgentCmd::SetLimits {
-            max_per_day,
             max_loops,
             dry_run,
-            enforce_quota,
             no_confirm_dangerous_tools,
         } => {
-            if let Some(m) = max_per_day {
-                ac.max_per_day = m;
-            }
             if let Some(m) = max_loops {
                 ac.max_loops = m;
             }
             ac.dry_run = dry_run;
-            ac.quota_enforced = enforce_quota;
             ac.confirm_dangerous_tools = !no_confirm_dangerous_tools;
             ac.save(None)?;
             println!(
-                "已保存：max_per_day={}, max_loops={}, dry_run={}, quota_enforced={}, confirm_dangerous_tools={}",
-                ac.max_per_day, ac.max_loops, ac.dry_run, ac.quota_enforced, ac.confirm_dangerous_tools
+                "已保存：max_loops={}, dry_run={}, confirm_dangerous_tools={}",
+                ac.max_loops, ac.dry_run, ac.confirm_dangerous_tools
             );
-        }
-
-        AgentCmd::ResetQuota => {
-            let mut counters = xhh_agent::config::DailyCounters::load(None)?;
-            counters.count = 0;
-            counters.save(None)?;
-            println!("已重置今日配额计数（当前已用 0 次）");
         }
 
         AgentCmd::SetTemperature { value } => {
@@ -625,41 +600,13 @@ async fn handle_agent(cmd: AgentCmd, _cfg_path: &Option<PathBuf>) -> Result<()> 
             println!("温度已保存为: {:?}", ac.temperature);
         }
 
-        AgentCmd::Quota => {
-            if !ac.quota_enforced {
-                println!(
-                    "当前 Provider: {}（用户自配置）— 不消耗配额，调用次数无限制",
-                    if ac.active_provider.is_empty() {
-                        "(未设置)"
-                    } else {
-                        &ac.active_provider
-                    }
-                );
-                println!("（如需启用配额：xhh agent set-limits --enforce-quota）");
-            } else {
-                let counters = xhh_agent::config::DailyCounters::load(None)?;
-                let remaining = counters.remaining(ac.max_per_day);
-                let used = ac.max_per_day.saturating_sub(remaining);
-                println!(
-                    "当前 Provider: {}（后端 AI 服务，已启用配额）",
-                    ac.active_provider
-                );
-                println!(
-                    "今日配额: 已用 {} / {}，剩余 {}",
-                    used, ac.max_per_day, remaining
-                );
-                println!("（重置：xhh agent reset-quota）");
-            }
-        }
-
         AgentCmd::AutoPost { topic, hashtags } => {
             let cfg = Config::load(_cfg_path.as_deref()).context("读取配置失败")?;
             if !cfg.has_credentials() {
                 return Err(anyhow!("未登录，请先 xhh login"));
             }
             let client = XhhClient::new(cfg).context("构建 HTTP 客户端失败")?;
-            let counters = xhh_agent::config::DailyCounters::load(None)?;
-            let mut runner = AgentRunner::from_config(ac, counters, client)
+            let mut runner = AgentRunner::from_config(ac, client)
                 .context("构建 Agent 失败")?
                 .with_confirmation_handler(Box::new(xhh_agent::runner::StdinConfirmationHandler));
             let tags: Vec<String> = hashtags
@@ -689,8 +636,7 @@ async fn handle_agent(cmd: AgentCmd, _cfg_path: &Option<PathBuf>) -> Result<()> 
                 return Err(anyhow!("未登录，请先 xhh login"));
             }
             let client = XhhClient::new(cfg).context("构建 HTTP 客户端失败")?;
-            let counters = xhh_agent::config::DailyCounters::load(None)?;
-            let mut runner = AgentRunner::from_config(ac, counters, client)
+            let mut runner = AgentRunner::from_config(ac, client)
                 .context("构建 Agent 失败")?
                 .with_confirmation_handler(Box::new(xhh_agent::runner::StdinConfirmationHandler));
             println!("\nAgent 启动...\n");

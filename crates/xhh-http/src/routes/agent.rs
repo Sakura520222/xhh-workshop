@@ -4,7 +4,7 @@ use axum::extract::State;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
-use xhh_agent::config::{AgentConfig, DailyCounters};
+use xhh_agent::config::AgentConfig;
 use xhh_agent::runner::{AgentResult, AgentRunner};
 
 use crate::error::{ApiError, ApiResult};
@@ -26,12 +26,11 @@ pub struct AutoPostReq {
 
 async fn build_runner(state: &AppState) -> ApiResult<AgentRunner> {
     let cfg = AgentConfig::load(None).map_err(|e| ApiError::Config(e.to_string()))?;
-    let counters = DailyCounters::load(None).map_err(|e| ApiError::Config(e.to_string()))?;
     if state.snapshot().await.is_none() {
         return Err(ApiError::NotLoggedIn);
     }
     let client = state.require_client().await?;
-    AgentRunner::from_config(cfg, counters, client).map_err(ApiError::Agent)
+    AgentRunner::from_config(cfg, client).map_err(ApiError::Agent)
 }
 
 /// POST /api/agent/chat — Agent 通用对话

@@ -470,8 +470,7 @@ fn build_agent_runner(_state: &AppState) -> Result<xhh_agent::runner::AgentRunne
     }
     let client = XhhClient::new(cfg).map_err(|e| e.to_string())?;
     let ac = xhh_agent::config::AgentConfig::load(None).map_err(|e| e.to_string())?;
-    let counters = xhh_agent::config::DailyCounters::load(None).map_err(|e| e.to_string())?;
-    xhh_agent::runner::AgentRunner::from_config(ac, counters, client).map_err(|e| e.to_string())
+    xhh_agent::runner::AgentRunner::from_config(ac, client).map_err(|e| e.to_string())
 }
 
 /// Agent 多轮对话（复用持久会话，保留完整上下文）

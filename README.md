@@ -129,8 +129,7 @@ cargo tauri build
 | 文件 | 路径 | 用途 |
 |---|---|---|
 | 登录凭据 | `%APPDATA%\xhh\config.json` | pkey / heybox_id |
-| Agent 配置 | `%APPDATA%\xhh\agent.json` | Provider / 配额等 |
-| 配额计数器 | `%APPDATA%\xhh\agent_counters.json` | 每日配额 |
+| Agent 配置 | `%APPDATA%\xhh\agent.json` | Provider 等 |
 
 ## License
 

@@ -1,5 +1,6 @@
 // Tauri IPC 调用封装
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 export interface QrCodeResp {
   qr_url: string;
@@ -189,7 +190,6 @@ export async function agentChatStream(
   };
 
   try {
-    const { listen } = await import("@tauri-apps/api/event");
     const registrations = await Promise.allSettled([
       listen<string>("agent-chunk", (e) => { if (!cleaned) onChunk(e.payload); }),
       listen<string>("agent-tool", (e) => { if (!cleaned) onTool(e.payload); }),
@@ -243,8 +243,6 @@ export async function aiAnalyzeStream(
   onDone: () => void,
   onError: (err: string) => void,
 ): Promise<void> {
-  const { listen } = await import("@tauri-apps/api/event");
-
   let cleaned = false;
   const unlisteners = await Promise.all([
     listen<string>("ai-chunk", (e) => { if (!cleaned) onChunk(e.payload); }),

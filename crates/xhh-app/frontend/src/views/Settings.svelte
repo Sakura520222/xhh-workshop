@@ -211,42 +211,42 @@
 
         {#if activeProvider === "openai"}
           <div class="field-group">
-            <label class="label">API Key</label>
-            <input type="password" bind:value={openaiKey} class="input" placeholder="sk-..." />
+            <label class="label" for="openai-key">API Key</label>
+            <input id="openai-key" type="password" bind:value={openaiKey} class="input" placeholder="sk-..." />
           </div>
           <div class="field-group">
-            <label class="label">Model</label>
-            <input type="text" bind:value={openaiModel} class="input" placeholder="gpt-4o-mini" />
+            <label class="label" for="openai-model">Model</label>
+            <input id="openai-model" type="text" bind:value={openaiModel} class="input" placeholder="gpt-4o-mini" />
           </div>
           <div class="field-group">
-            <label class="label">Base URL</label>
-            <input type="text" bind:value={openaiBaseUrl} class="input" placeholder="https://api.openai.com/v1" />
+            <label class="label" for="openai-base-url">Base URL</label>
+            <input id="openai-base-url" type="text" bind:value={openaiBaseUrl} class="input" placeholder="https://api.openai.com/v1" />
           </div>
         {:else if activeProvider === "anthropic"}
           <div class="field-group">
-            <label class="label">API Key</label>
-            <input type="password" bind:value={anthropicKey} class="input" placeholder="sk-ant-..." />
+            <label class="label" for="anthropic-key">API Key</label>
+            <input id="anthropic-key" type="password" bind:value={anthropicKey} class="input" placeholder="sk-ant-..." />
           </div>
           <div class="field-group">
-            <label class="label">Model</label>
-            <input type="text" bind:value={anthropicModel} class="input" placeholder="claude-haiku-4-5-20251001" />
+            <label class="label" for="anthropic-model">Model</label>
+            <input id="anthropic-model" type="text" bind:value={anthropicModel} class="input" placeholder="claude-haiku-4-5-20251001" />
           </div>
           <div class="field-group">
-            <label class="label">Base URL</label>
-            <input type="text" bind:value={anthropicBaseUrl} class="input" placeholder="https://api.anthropic.com" />
+            <label class="label" for="anthropic-base-url">Base URL</label>
+            <input id="anthropic-base-url" type="text" bind:value={anthropicBaseUrl} class="input" placeholder="https://api.anthropic.com" />
           </div>
           <div class="field-group">
-            <label class="label">Max Tokens</label>
-            <input type="number" bind:value={anthropicMaxTokens} class="input" placeholder="4096" min="1" />
+            <label class="label" for="anthropic-max-tokens">Max Tokens</label>
+            <input id="anthropic-max-tokens" type="number" bind:value={anthropicMaxTokens} class="input" placeholder="4096" min="1" />
           </div>
         {:else if activeProvider === "ollama"}
           <div class="field-group">
-            <label class="label">Model</label>
-            <input type="text" bind:value={ollamaModel} class="input" placeholder="qwen2.5:14b" />
+            <label class="label" for="ollama-model">Model</label>
+            <input id="ollama-model" type="text" bind:value={ollamaModel} class="input" placeholder="qwen2.5:14b" />
           </div>
           <div class="field-group">
-            <label class="label">Base URL</label>
-            <input type="text" bind:value={ollamaBaseUrl} class="input" placeholder="http://localhost:11434" />
+            <label class="label" for="ollama-base-url">Base URL</label>
+            <input id="ollama-base-url" type="text" bind:value={ollamaBaseUrl} class="input" placeholder="http://localhost:11434" />
           </div>
         {/if}
       </section>
@@ -255,12 +255,12 @@
       <section class="section">
         <h3 class="section-title">通用参数</h3>
         <div class="field-group">
-          <label class="label">最大循环轮数</label>
-          <input type="number" bind:value={maxLoops} class="input" min="1" max="50" />
+          <label class="label" for="max-loops">最大循环轮数</label>
+          <input id="max-loops" type="number" bind:value={maxLoops} class="input" min="1" max="50" />
         </div>
         <div class="field-group">
-          <label class="label">Temperature (0-2，留空用默认)</label>
-          <input type="text" bind:value={temperature} class="input" placeholder="0.7" />
+          <label class="label" for="temperature">Temperature (0-2，留空用默认)</label>
+          <input id="temperature" type="text" bind:value={temperature} class="input" placeholder="0.7" />
         </div>
       </section>
 
@@ -477,13 +477,6 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
-  }
-  .field-group.half {
-    flex: 1;
-  }
-  .row {
-    display: flex;
-    gap: 14px;
   }
   .label {
     font-size: 12px;

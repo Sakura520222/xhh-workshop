@@ -129,7 +129,13 @@
   {:else}
     <div class="msg-list">
       {#each messages as msg}
-        <div class="msg-item" onclick={() => openPost(msg.linkid)}>
+        <div
+          class="msg-item"
+          role="button"
+          tabindex="0"
+          onclick={() => openPost(msg.linkid)}
+          onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPost(msg.linkid); } }}
+        >
           <div class="msg-header">
             <button
               class="user-link"
@@ -261,6 +267,7 @@
     overflow: hidden;
     display: -webkit-box;
     -webkit-line-clamp: 1;
+    line-clamp: 1;
     -webkit-box-orient: vertical;
   }
   .msg-text {
@@ -272,6 +279,7 @@
     overflow: hidden;
     display: -webkit-box;
     -webkit-line-clamp: 3;
+    line-clamp: 3;
     -webkit-box-orient: vertical;
   }
   .status {

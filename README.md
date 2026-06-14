@@ -68,6 +68,10 @@ cargo fmt --all
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
+## 开发流程
+
+本项目采用 Gitflow 工作流：从 `develop` 切分支开发，PR 合回 `develop` 触发 nightly 构建；`develop` 合并到 `main` 触发正式版发布。详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
 ## 使用
 
 ### CLI

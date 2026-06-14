@@ -226,6 +226,15 @@ export const aiCacheGet = (linkId: string): Promise<AiCacheItem[]> =>
 export const aiCacheSave = (linkId: string, kind: string, content: string): Promise<AiCacheItem> =>
   invoke("ai_cache_save", { linkId, kind, content });
 
+// Window
+export type WindowEffect = "none" | "mica" | "acrylic";
+
+export const windowEffectGet = (): Promise<WindowEffect> =>
+  invoke<WindowEffect>("window_effect_get");
+
+export const windowEffectSet = (effect: WindowEffect): Promise<void> =>
+  invoke("window_effect_set", { effect });
+
 // AI (streaming via Tauri events)
 export async function aiAnalyzeStream(
   prompt: string,

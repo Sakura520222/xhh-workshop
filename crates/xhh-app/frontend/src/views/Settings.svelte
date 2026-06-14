@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { agentGetConfig, agentSaveConfig } from "../lib/api";
+  import { agentGetConfig, agentSaveConfig, windowEffectGet, windowEffectSet } from "../lib/api";
+  import type { WindowEffect } from "../lib/api";
   import { getTheme, setTheme, THEMES } from "../lib/stores.svelte";
 
   type ProviderKey = "openai" | "anthropic" | "ollama";
@@ -28,7 +29,17 @@
   let maxLoops = $state(8);
   let temperature = $state("");
 
+  // 窗口效果
+  let windowEffect = $state<WindowEffect>("mica");
+  let windowEffectSaving = $state(false);
+
   let currentTheme = $derived(getTheme());
+
+  const windowEffectOptions: { key: WindowEffect; label: string; hint: string }[] = [
+    { key: "mica", label: "云母", hint: "Windows 11 推荐效果" },
+    { key: "acrylic", label: "亚克力", hint: "Windows 10/11 通用" },
+    { key: "none", label: "无", hint: "关闭背景模糊" },
+  ];
 
   let providers: { key: ProviderKey; label: string }[] = [
     { key: "openai", label: "OpenAI" },
@@ -40,6 +51,7 @@
     loading = true;
     error = "";
     try {
+      windowEffect = await windowEffectGet();
       const cfg = await agentGetConfig();
       activeProvider = cfg.active_provider || "openai";
       if (cfg.openai) {
@@ -101,6 +113,20 @@
     }
   }
 
+  async function changeWindowEffect(effect: WindowEffect) {
+    if (effect === windowEffect || windowEffectSaving) return;
+    windowEffectSaving = true;
+    error = "";
+    try {
+      await windowEffectSet(effect);
+      windowEffect = effect;
+    } catch (e) {
+      error = String(e);
+    } finally {
+      windowEffectSaving = false;
+    }
+  }
+
   onMount(load);
 </script>
 
@@ -125,6 +151,30 @@
           <span class="theme-name">{opt.label}</span>
           {#if currentTheme === opt.key}
             <span class="theme-check" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </span>
+          {/if}
+        </button>
+      {/each}
+    </div>
+  </section>
+
+  <section class="section">
+    <h3 class="section-title">窗口效果</h3>
+    <div class="effect-grid">
+      {#each windowEffectOptions as opt}
+        <button
+          type="button"
+          class="effect-card"
+          class:active={windowEffect === opt.key}
+          aria-pressed={windowEffect === opt.key}
+          disabled={windowEffectSaving}
+          onclick={() => changeWindowEffect(opt.key)}
+        >
+          <span class="effect-name">{opt.label}</span>
+          <span class="effect-hint">{opt.hint}</span>
+          {#if windowEffect === opt.key}
+            <span class="effect-check" aria-hidden="true">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             </span>
           {/if}
@@ -344,6 +394,56 @@
     height: 18px;
     border-radius: 50%;
     background: var(--preview);
+    color: #fff;
+  }
+  .effect-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .effect-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 14px 8px 12px;
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.04);
+    border: 0.5px solid var(--glass-border);
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .effect-card:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.07);
+    transform: translateY(-1px);
+  }
+  .effect-card:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .effect-card.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent), 0 4px 18px color-mix(in srgb, var(--accent) 28%, transparent);
+  }
+  .effect-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-strong);
+  }
+  .effect-hint {
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+  .effect-check {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--accent);
     color: #fff;
   }
   .provider-tabs {

@@ -5,7 +5,7 @@
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use xhh_core::api::{
     comment as api_comment, emoji as api_emoji, feed as api_feed, interaction as api_inter,
     post as api_post, search as api_search, user as api_user,
@@ -1992,4 +1992,23 @@ pub async fn user_events(
     )
     .await
     .map_err(|e| e.to_string())
+}
+
+// ─── Window ──────────────────────────────────────────────
+
+#[tauri::command]
+pub fn window_effect_get() -> crate::prefs::WindowEffect {
+    crate::prefs::load_effect()
+}
+
+#[tauri::command]
+pub fn window_effect_set(
+    app: AppHandle,
+    effect: crate::prefs::WindowEffect,
+) -> Result<(), String> {
+    crate::prefs::save_effect(effect)?;
+    if let Some(window) = app.get_webview_window("main") {
+        crate::apply_window_effect(&window, effect)?;
+    }
+    Ok(())
 }

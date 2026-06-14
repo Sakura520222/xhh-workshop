@@ -1,10 +1,12 @@
 //! xhh-app Tauri 后端入口
 
 pub mod commands;
+pub mod prefs;
 pub mod state;
 
+use prefs::WindowEffect;
 use state::AppState;
-use tauri::Manager;
+use tauri::{Manager, WebviewWindow};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -12,12 +14,10 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(AppState::try_load())
         .setup(|app| {
-            #[cfg(target_os = "windows")]
-            {
-                use window_vibrancy::{apply_acrylic, apply_mica};
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = apply_mica(&window, Some(true))
-                        .or_else(|_| apply_acrylic(&window, Some((18, 18, 18, 125))));
+            if let Some(window) = app.get_webview_window("main") {
+                let effect = prefs::load_effect();
+                if let Err(e) = apply_window_effect(&window, effect) {
+                    tracing::warn!(error = %e, "应用窗口效果失败");
                 }
             }
 
@@ -91,7 +91,34 @@ pub fn run() {
             commands::following_list,
             commands::follower_list,
             commands::user_events,
+            // window
+            commands::window_effect_get,
+            commands::window_effect_set,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// 把指定窗口效果应用到窗口上。
+/// 非 Windows 平台为 no-op；切换前会先清除既有 mica/acrylic。
+pub fn apply_window_effect(window: &WebviewWindow, effect: WindowEffect) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use window_vibrancy::{apply_acrylic, apply_mica, clear_acrylic, clear_mica};
+        // 先清除既有效果，避免叠加
+        let _ = clear_mica(window);
+        let _ = clear_acrylic(window);
+        match effect {
+            WindowEffect::None => Ok(()),
+            WindowEffect::Mica => apply_mica(window, Some(true)).map_err(|e| e.to_string()),
+            WindowEffect::Acrylic => {
+                apply_acrylic(window, Some((18, 18, 18, 125))).map_err(|e| e.to_string())
+            }
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (window, effect);
+        Ok(())
+    }
 }

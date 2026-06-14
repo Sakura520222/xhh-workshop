@@ -1,5 +1,5 @@
 // 全局状态（Svelte 5 runes 风格）
-import { authStatus, type LoginResult } from "./api";
+import { authStatus, type LoginResult, type WindowEffect } from "./api";
 
 export type View = "home" | "profile" | "agent" | "settings" | "detail" | "editor" | "search" | "notifications" | "favourites" | "user";
 
@@ -170,5 +170,34 @@ export function setTheme(t: Theme) {
   applyTheme(t);
   try {
     localStorage.setItem(THEME_STORAGE_KEY, t);
+  } catch { /* ignore */ }
+}
+
+// 窗口效果（前端 attr 控制 body 背景透明度，实际效果由后端应用）
+const WINDOW_EFFECT_STORAGE_KEY = "xhh_window_effect";
+const VALID_WINDOW_EFFECTS: WindowEffect[] = ["none", "mica", "acrylic"];
+const DEFAULT_WINDOW_EFFECT: WindowEffect = "mica";
+
+function loadPersistedWindowEffect(): WindowEffect {
+  try {
+    const raw = localStorage.getItem(WINDOW_EFFECT_STORAGE_KEY) as WindowEffect | null;
+    if (raw && VALID_WINDOW_EFFECTS.includes(raw)) return raw;
+  } catch { /* ignore */ }
+  return DEFAULT_WINDOW_EFFECT;
+}
+
+function applyWindowEffectAttr(effect: WindowEffect) {
+  document.documentElement.dataset.windowEffect = effect;
+}
+
+// 模块加载时立即应用，避免首屏背景闪烁
+if (typeof document !== "undefined") {
+  applyWindowEffectAttr(loadPersistedWindowEffect());
+}
+
+export function setWindowEffectAttr(effect: WindowEffect) {
+  applyWindowEffectAttr(effect);
+  try {
+    localStorage.setItem(WINDOW_EFFECT_STORAGE_KEY, effect);
   } catch { /* ignore */ }
 }

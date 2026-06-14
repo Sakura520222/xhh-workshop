@@ -94,6 +94,12 @@
     -webkit-backdrop-filter: blur(28px) saturate(1.35);
   }
 
+  /* 云母/亚克力：降低背景不透明度，让底层效果透过 */
+  :global(html[data-window-effect="mica"]) .sidebar,
+  :global(html[data-window-effect="acrylic"]) .sidebar {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg) 45%, transparent) 0%, color-mix(in srgb, var(--bg-soft) 35%, transparent) 100%);
+  }
+
   .user-info {
     display: flex;
     align-items: center;

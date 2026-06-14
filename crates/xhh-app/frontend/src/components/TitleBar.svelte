@@ -37,6 +37,12 @@
     -webkit-backdrop-filter: blur(24px) saturate(1.45);
   }
 
+  /* 云母/亚克力：降低背景不透明度，让底层效果透过 */
+  :global(html[data-window-effect="mica"]) .titlebar,
+  :global(html[data-window-effect="acrylic"]) .titlebar {
+    background: color-mix(in srgb, var(--bg) 40%, transparent);
+  }
+
   .left {
     display: flex;
     align-items: center;

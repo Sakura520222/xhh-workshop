@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { agentGetConfig, agentSaveConfig, windowEffectGet, windowEffectSet } from "../lib/api";
   import type { WindowEffect } from "../lib/api";
-  import { getTheme, setTheme, THEMES } from "../lib/stores.svelte";
+  import { getTheme, setTheme, THEMES, setWindowEffectAttr } from "../lib/stores.svelte";
 
   type ProviderKey = "openai" | "anthropic" | "ollama";
 
@@ -52,6 +52,7 @@
     error = "";
     try {
       windowEffect = await windowEffectGet();
+      setWindowEffectAttr(windowEffect);
       const cfg = await agentGetConfig();
       activeProvider = cfg.active_provider || "openai";
       if (cfg.openai) {
@@ -119,6 +120,7 @@
     error = "";
     try {
       await windowEffectSet(effect);
+      setWindowEffectAttr(effect);
       windowEffect = effect;
     } catch (e) {
       error = String(e);

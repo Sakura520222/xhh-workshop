@@ -228,6 +228,22 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* 云母/亚克力：让 body 渐变半透明，让底层窗口效果透过 */
+html[data-window-effect="mica"],
+html[data-window-effect="acrylic"] {
+  background: transparent;
+}
+html[data-window-effect="mica"] body,
+html[data-window-effect="acrylic"] body {
+  background:
+    radial-gradient(circle at 12% -12%, color-mix(in srgb, var(--glow-1) 24%, transparent), transparent 34%),
+    radial-gradient(circle at 88% 8%, color-mix(in srgb, var(--glow-2) 18%, transparent), transparent 32%),
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--bg-grad-1) 60%, transparent) 0%,
+      color-mix(in srgb, var(--bg-grad-2) 60%, transparent) 48%,
+      color-mix(in srgb, var(--bg-grad-3) 60%, transparent) 100%);
+}
+
 body::before {
   content: "";
   position: fixed;

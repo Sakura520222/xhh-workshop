@@ -1,12 +1,12 @@
 name: Release
 
-# 正式版由 v* tag 触发；开发版由 main 推送触发（持续更新 nightly prerelease）
+# main 推送：按 tauri.conf.json 的 version 自动打 tag 并发正式版（同版本已发则跳过）
+# develop 推送：持续更新 nightly 预发布版
 on:
   push:
     branches:
       - main
-    tags:
-      - 'v*'
+      - develop
   workflow_dispatch:
 
 permissions:
@@ -20,13 +20,48 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Compute release metadata
+        id: meta
+        shell: bash
+        run: |
+          conf_version=$(grep -oE '"version"[[:space:]]*:[[:space:]]*"[^"]*"' crates/xhh-app/tauri.conf.json | head -1 | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
+
+          if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            tag="v${conf_version}"
+            if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              echo "::notice::${tag} 已发布，跳过本次构建（如需发新版请 bump tauri.conf.json 的 version）"
+            else
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+            fi
+            echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+            echo "version=${conf_version}" >> "$GITHUB_OUTPUT"
+            echo "name=黑盒工坊 v${conf_version}" >> "$GITHUB_OUTPUT"
+            if [[ "${conf_version}" == *-* ]]; then
+              echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            sha=$(echo "${GITHUB_SHA}" | cut -c1-7)
+            date=$(date -u +%Y-%m-%d)
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "tag=nightly" >> "$GITHUB_OUTPUT"
+            echo "version=nightly" >> "$GITHUB_OUTPUT"
+            echo "name=黑盒工坊 开发版 (v${conf_version} ${date} ${sha})" >> "$GITHUB_OUTPUT"
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install Rust stable
+        if: steps.meta.outputs.skip != 'true'
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust build
+        if: steps.meta.outputs.skip != 'true'
         uses: swatinem/rust-cache@v2
 
       - name: Setup Node.js
+        if: steps.meta.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -34,39 +69,18 @@ jobs:
           cache-dependency-path: crates/xhh-app/frontend/package-lock.json
 
       - name: Install frontend dependencies
+        if: steps.meta.outputs.skip != 'true'
         run: npm ci
         working-directory: crates/xhh-app/frontend
 
       - name: Build app
+        if: steps.meta.outputs.skip != 'true'
         uses: tauri-apps/tauri-action@v0
         with:
           projectPath: crates/xhh-app
 
-      - name: Compute release metadata
-        id: meta
-        shell: bash
-        run: |
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            version="${GITHUB_REF_NAME#v}"
-            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-            echo "version=${version}" >> "$GITHUB_OUTPUT"
-            echo "name=黑盒工坊 ${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-            if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
-              echo "prerelease=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "prerelease=false" >> "$GITHUB_OUTPUT"
-            fi
-          else
-            conf_version=$(grep -oE '"version"[[:space:]]*:[[:space:]]*"[^"]*"' crates/xhh-app/tauri.conf.json | head -1 | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')
-            sha=$(echo "${GITHUB_SHA}" | cut -c1-7)
-            date=$(date -u +%Y-%m-%d)
-            echo "tag=nightly" >> "$GITHUB_OUTPUT"
-            echo "version=nightly" >> "$GITHUB_OUTPUT"
-            echo "name=黑盒工坊 开发版 (v${conf_version} ${date} ${sha})" >> "$GITHUB_OUTPUT"
-            echo "prerelease=true" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Collect and rename artifacts
+        if: steps.meta.outputs.skip != 'true'
         shell: bash
         run: |
           version="${{ steps.meta.outputs.version }}"
@@ -91,6 +105,7 @@ jobs:
           cp "$exe" "黑盒工坊_${version}_x64_portable.exe"
 
       - name: Publish release
+        if: steps.meta.outputs.skip != 'true'
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

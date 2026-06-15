@@ -508,6 +508,7 @@ pub async fn agent_chat(
 /// 重置当前活跃会话（清空上下文，但保留会话条目）
 #[tauri::command]
 pub async fn agent_reset(state: State<'_, AppState>) -> Result<(), String> {
+    ensure_agent_runtime(&state).await?;
     let mut sessions = state.agent_sessions.lock().await;
     if let Some(session) = sessions.active_mut() {
         let title = session.title.clone();
@@ -898,6 +899,7 @@ pub async fn agent_session_rename(
     id: String,
     title: String,
 ) -> Result<(), String> {
+    ensure_agent_runtime(&state).await?;
     let mut sessions = state.agent_sessions.lock().await;
     let session = sessions
         .sessions
@@ -973,6 +975,7 @@ pub async fn agent_history_save(
 /// 清空当前活跃会话的 UI 消息（保留会话本身；LLM 消息保留）
 #[tauri::command]
 pub async fn agent_history_clear(state: State<'_, AppState>) -> Result<(), String> {
+    ensure_agent_runtime(&state).await?;
     let mut sessions = state.agent_sessions.lock().await;
     if let Some(session) = sessions.active_mut() {
         session.ui_messages.clear();
@@ -1040,12 +1043,23 @@ fn builtin_templates() -> Vec<AgentTemplate> {
 
 fn load_templates_from_disk() -> Vec<AgentTemplate> {
     let path = agent_templates_path();
-    if !path.exists() {
-        let seed = builtin_templates();
-        let _ = save_json_file(&path, &seed);
-        return seed;
+    let mut disk: Vec<AgentTemplate> = if path.exists() {
+        load_json_file::<Vec<AgentTemplate>>(&path).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    // 始终补回缺失的内置模板（即使用户曾删除过）
+    let mut changed = false;
+    for builtin in builtin_templates() {
+        if !disk.iter().any(|t| t.id == builtin.id) {
+            disk.push(builtin);
+            changed = true;
+        }
     }
-    load_json_file::<Vec<AgentTemplate>>(&path).unwrap_or_default()
+    if changed || !path.exists() {
+        let _ = save_json_file(&path, &disk.to_vec());
+    }
+    disk
 }
 
 fn save_templates_to_disk(templates: &[AgentTemplate]) -> Result<(), String> {
@@ -1095,7 +1109,13 @@ pub async fn agent_template_save(
         save_templates_to_disk(&templates)?;
         return Ok(snapshot);
     }
-    let new_id = format!("t_{:x}", now);
+    let new_id = {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        format!("t_{:x}_{:06x}", (ts >> 24) as u64, (ts % 0x100_0000) as u32)
+    };
     let template = AgentTemplate {
         id: new_id,
         title: resolved_title,
@@ -1945,50 +1965,59 @@ pub async fn agent_chat_stream(
     let c = state.require_client().await?;
     let max_loops = ac.max_loops.max(1);
 
-    let mut sessions = state.agent_sessions.lock().await;
-    let session = sessions
-        .active_mut()
-        .ok_or("Agent 会话未初始化")?;
-
-    let mut resume_pending = if has_confirmation_decisions {
-        session.pending_resume.take()
-    } else {
-        session.pending_resume = None;
-        None
+    // 短锁：取活跃 session 的 messages 快照 + pending_resume 状态，立即释放锁
+    let (mut messages_snapshot, mut resume_pending, loops_init, tools_init): (
+        Vec<ChatMessage>,
+        Option<StreamOutput>,
+        u32,
+        Vec<String>,
+    ) = {
+        let mut sessions = state.agent_sessions.lock().await;
+        let session = sessions
+            .active_mut()
+            .ok_or("Agent 会话未初始化")?;
+        let pending = if has_confirmation_decisions {
+            session.pending_resume.take()
+        } else {
+            session.pending_resume = None;
+            None
+        };
+        if has_confirmation_decisions && pending.is_none() {
+            return Err("没有等待确认的工具调用".into());
+        }
+        if pending.is_none() {
+            session.messages.push(ChatMessage::user(message));
+        }
+        let loops = pending.as_ref().map_or(0, |p| p.loops_used);
+        let tools = pending
+            .as_ref()
+            .map_or_else(Vec::new, |p| p.completed_tool_calls.clone());
+        let resume = pending.map(|p| StreamOutput {
+            content: String::new(),
+            tool_calls: p.tool_calls,
+        });
+        (session.messages.clone(), resume, loops, tools)
     };
-    if has_confirmation_decisions && resume_pending.is_none() {
-        return Err("没有等待确认的工具调用".into());
-    }
 
-    if resume_pending.is_none() {
-        session.messages.push(ChatMessage::user(message));
-    }
-
-    let mut loops_used = resume_pending
-        .as_ref()
-        .map_or(0, |pending| pending.loops_used);
-    let mut all_tool_calls = resume_pending
-        .as_ref()
-        .map_or_else(Vec::new, |pending| pending.completed_tool_calls.clone());
+    let mut loops_used = loops_init;
+    let mut all_tool_calls = tools_init;
 
     loop {
         let is_resuming = resume_pending.is_some();
         let output = if let Some(pending) = resume_pending.take() {
-            StreamOutput {
-                content: String::new(),
-                tool_calls: pending.tool_calls,
-            }
+            pending
         } else {
             if loops_used >= max_loops {
                 break;
             }
             loops_used += 1;
+            // LLM 流式调用：不持有 sessions 锁
             let out = match &provider_kind {
                 ProviderKind::OpenAi(cfg) => {
                     stream_agent_openai(
                         &app,
                         cfg,
-                        session.messages.clone(),
+                        messages_snapshot.clone(),
                         specs.clone(),
                         ac.temperature,
                     )
@@ -1998,7 +2027,7 @@ pub async fn agent_chat_stream(
                     stream_agent_anthropic(
                         &app,
                         cfg,
-                        session.messages.clone(),
+                        messages_snapshot.clone(),
                         specs.clone(),
                         ac.temperature,
                     )
@@ -2008,7 +2037,7 @@ pub async fn agent_chat_stream(
                     stream_agent_ollama(
                         &app,
                         cfg,
-                        session.messages.clone(),
+                        messages_snapshot.clone(),
                         specs.clone(),
                         ac.temperature,
                     )
@@ -2018,8 +2047,8 @@ pub async fn agent_chat_stream(
             match out {
                 Ok(o) => o,
                 Err(e) => {
-                    let snap = session.clone();
-                    drop(sessions);
+                    // 短锁：写回 messages + touch，锁外持久化
+                    let snap = flush_messages(&state, &messages_snapshot).await;
                     persist_session(&snap);
                     let _ = app.emit("agent-error", &e);
                     return Err(e);
@@ -2028,13 +2057,14 @@ pub async fn agent_chat_stream(
         };
 
         if !is_resuming && (!output.content.is_empty() || !output.tool_calls.is_empty()) {
-            session.messages.push(ChatMessage::assistant_with_tools(
+            messages_snapshot.push(ChatMessage::assistant_with_tools(
                 output.content.clone(),
                 output.tool_calls.clone(),
             ));
         }
 
         if !output.tool_calls.is_empty() {
+            // 危险工具确认检查
             if ac.confirm_dangerous_tools {
                 for tc in &output.tool_calls {
                     let Some(t) = tool_reg.get(&tc.name) else {
@@ -2057,14 +2087,21 @@ pub async fn agent_chat_stream(
                         summary: confirmation.summary,
                         arguments_json: confirmation.arguments_json,
                     };
-                    session.pending_resume = Some(crate::state::PendingResume {
-                        tool_calls: output.tool_calls.clone(),
-                        loops_used,
-                        completed_tool_calls: all_tool_calls.clone(),
-                    });
-                    session.touch();
-                    let snap = session.clone();
-                    drop(sessions);
+                    // 短锁：写回 messages + pending_resume + touch
+                    let snap = {
+                        let mut sessions = state.agent_sessions.lock().await;
+                        let session = sessions
+                            .active_mut()
+                            .ok_or("Agent 会话未初始化")?;
+                        session.messages = messages_snapshot.clone();
+                        session.pending_resume = Some(crate::state::PendingResume {
+                            tool_calls: output.tool_calls.clone(),
+                            loops_used,
+                            completed_tool_calls: all_tool_calls.clone(),
+                        });
+                        session.touch();
+                        session.clone()
+                    };
                     persist_session(&snap);
                     let _ = app.emit("agent-tool-confirmation", &request);
                     let _ = app.emit(
@@ -2075,6 +2112,7 @@ pub async fn agent_chat_stream(
                 }
             }
 
+            // 工具执行：不持有 sessions 锁
             for tc in &output.tool_calls {
                 all_tool_calls.push(tc.name.clone());
                 let _ = app.emit("agent-tool", &tc.name);
@@ -2101,18 +2139,19 @@ pub async fn agent_chat_stream(
                         .unwrap_or_else(|e| format!("工具调用失败: {}", e)),
                     None => format!("工具 {} 不存在", tc.name),
                 };
-                session
-                    .messages
-                    .push(ChatMessage::tool(&tc.id, &tc.name, &tool_result));
+                messages_snapshot.push(ChatMessage::tool(&tc.id, &tc.name, &tool_result));
             }
-            session.touch();
-            persist_session(session);
+
+            // 短锁：写回 + 锁外持久化
+            let snap = flush_messages(&state, &messages_snapshot).await;
+            persist_session(&snap);
             // 工具调用完成，进入下一轮让 LLM 处理工具结果
             continue;
         }
 
-        session.touch();
-        persist_session(session);
+        // 完成：短锁 + 锁外持久化
+        let snap = flush_messages(&state, &messages_snapshot).await;
+        persist_session(&snap);
         let _ = app.emit(
             "agent-done",
             serde_json::json!({ "tool_calls": all_tool_calls, "loops_used": loops_used }),
@@ -2120,10 +2159,27 @@ pub async fn agent_chat_stream(
         return Ok(());
     }
 
-    session.touch();
-    persist_session(session);
+    // 达到 max_loops：短锁 + 锁外持久化
+    let snap = flush_messages(&state, &messages_snapshot).await;
+    persist_session(&snap);
     let _ = app.emit("agent-error", "达到最大循环次数");
     Err("达到最大循环次数".into())
+}
+
+/// 把当前 messages 写回活跃 session 并 touch，返回 clone 的 session 快照供锁外持久化
+async fn flush_messages(state: &AppState, messages: &[xhh_agent::provider::ChatMessage]) -> SessionData {
+    let mut sessions = state.agent_sessions.lock().await;
+    match sessions.active_mut() {
+        Some(session) => {
+            session.messages = messages.to_vec();
+            session.touch();
+            session.clone()
+        }
+        None => {
+            // 极端情况：会话被并发删除。返回一个空快照避免 panic，调用方 persist_session 仍会写入一个孤儿文件
+            SessionData::new("__orphan__".to_string())
+        }
+    }
 }
 
 /// 下载远程图片并转为 data URI

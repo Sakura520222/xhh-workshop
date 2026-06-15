@@ -13,7 +13,7 @@ use xhh_core::api::{
 use xhh_core::auth::{get_qr_code, poll_qr_state_once, QrCodeResp, QrPollResult};
 use xhh_core::client::XhhClient;
 
-use crate::state::{AgentSession, AppState};
+use crate::state::{AgentSessions, AppState, SessionData, SessionMeta};
 
 // ─── Auth ────────────────────────────────────────────────
 
@@ -479,22 +479,25 @@ pub async fn agent_chat(
     state: State<'_, AppState>,
     message: String,
 ) -> Result<AgentResultDto, String> {
-    // 首次调用时懒构建会话（预置 system prompt）
-    {
-        let mut guard = state.agent.lock().await;
-        if guard.is_none() {
-            let runner = build_agent_runner(&state)?;
-            *guard = Some(AgentSession::new(runner));
-        }
-    }
-    // 复用消息历史进行多轮对话
-    let mut guard = state.agent.lock().await;
-    let session = guard.as_mut().ok_or("Agent 会话未初始化")?;
-    let r = session
-        .runner
+    ensure_agent_runtime(&state).await?;
+    // 持有 runner + sessions 双锁直到完成（同步阻塞型，预期短）
+    let mut runner_guard = state.agent_runner.lock().await;
+    let runner = runner_guard
+        .as_mut()
+        .ok_or_else(|| "Agent runner 未初始化".to_string())?;
+    let mut sessions = state.agent_sessions.lock().await;
+    let session = sessions.active_mut().ok_or("Agent 会话未初始化")?;
+    let r = runner
         .chat_with_history(&mut session.messages, &message)
         .await
         .map_err(|e| e.to_string())?;
+    session.touch();
+    let snapshot = snapshot_active(&sessions);
+    drop(sessions);
+    drop(runner_guard);
+    if let Some(snap) = snapshot {
+        persist_session(&snap);
+    }
     Ok(AgentResultDto {
         final_output: r.final_output,
         tool_calls: r.tool_calls,
@@ -502,18 +505,24 @@ pub async fn agent_chat(
     })
 }
 
-/// 重置 Agent 会话（清空上下文和持久化历史）
+/// 重置当前活跃会话（清空上下文，但保留会话条目）
 #[tauri::command]
 pub async fn agent_reset(state: State<'_, AppState>) -> Result<(), String> {
-    *state.agent.lock().await = None;
-    // 清空持久化
-    let ui = agent_history_path();
-    let llm = agent_llm_history_path();
-    if ui.exists() {
-        let _ = std::fs::remove_file(&ui);
-    }
-    if llm.exists() {
-        let _ = std::fs::remove_file(&llm);
+    ensure_agent_runtime(&state).await?;
+    let mut sessions = state.agent_sessions.lock().await;
+    if let Some(session) = sessions.active_mut() {
+        let title = session.title.clone();
+        let id = session.id.clone();
+        let created_at = session.created_at;
+        *session = SessionData::new(id);
+        session.title = title;
+        session.created_at = created_at;
+        session.touch();
+        let snapshot = snapshot_active(&sessions);
+        drop(sessions);
+        if let Some(snap) = snapshot {
+            persist_session(&snap);
+        }
     }
     Ok(())
 }
@@ -634,14 +643,34 @@ pub struct AgentUiMsg {
     pub loops: Option<u32>,
 }
 
-fn agent_history_path() -> std::path::PathBuf {
+// ─── Agent Sessions 持久化 ───────────────────────────────
+
+fn xhh_config_root() -> std::path::PathBuf {
     let dirs = directories::BaseDirs::new().expect("无法解析用户目录");
-    dirs.config_dir().join("xhh").join("agent_history.json")
+    dirs.config_dir().join("xhh")
 }
 
-fn agent_llm_history_path() -> std::path::PathBuf {
-    let dirs = directories::BaseDirs::new().expect("无法解析用户目录");
-    dirs.config_dir().join("xhh").join("agent_llm_history.json")
+/// 旧版（v0.1.x）单文件历史，仅用于一次性迁移到多会话目录
+fn legacy_agent_history_path() -> std::path::PathBuf {
+    xhh_config_root().join("agent_history.json")
+}
+
+fn legacy_agent_llm_history_path() -> std::path::PathBuf {
+    xhh_config_root().join("agent_llm_history.json")
+}
+
+/// 多会话目录：每会话一个 JSON 文件
+fn agent_sessions_dir() -> std::path::PathBuf {
+    xhh_config_root().join("agent_sessions")
+}
+
+fn agent_session_path(id: &str) -> std::path::PathBuf {
+    agent_sessions_dir().join(format!("{}.json", id))
+}
+
+/// 任务模板：单文件数组
+fn agent_templates_path() -> std::path::PathBuf {
+    xhh_config_root().join("agent_templates.json")
 }
 
 fn load_json_file<T: serde::de::DeserializeOwned>(path: &std::path::Path) -> Result<T, String> {
@@ -663,46 +692,453 @@ fn save_json_file<T: serde::Serialize>(path: &std::path::Path, val: &T) -> Resul
     std::fs::write(path, json).map_err(|e| e.to_string())
 }
 
-/// 读取前端 UI 聊天记录
-#[tauri::command]
-pub async fn agent_history_get() -> Result<Vec<AgentUiMsg>, String> {
-    let path = agent_history_path();
-    let msgs: Vec<AgentUiMsg> = load_json_file(&path).unwrap_or_default();
-    Ok(msgs)
+/// 生成新会话 ID（时间戳 + 短随机后缀，避免依赖 uuid crate）
+fn new_session_id() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let suffix = (ts % 0x100_0000) as u32;
+    format!("s_{:x}_{:06x}", (ts >> 24) as u64, suffix)
 }
 
-/// 保存前端 UI 聊天记录
-#[tauri::command]
-pub async fn agent_history_save(messages: Vec<AgentUiMsg>) -> Result<(), String> {
-    save_json_file(&agent_history_path(), &messages)
-}
-
-/// 清空所有 Agent 历史（UI + LLM）
-#[tauri::command]
-pub async fn agent_history_clear() -> Result<(), String> {
-    let ui = agent_history_path();
-    let llm = agent_llm_history_path();
-    if ui.exists() {
-        std::fs::remove_file(&ui).map_err(|e| e.to_string())?;
+/// 从磁盘加载所有会话；首次启动时执行旧文件迁移
+fn load_all_sessions_from_disk() -> Vec<SessionData> {
+    let dir = agent_sessions_dir();
+    if !dir.exists() {
+        // 首次启动：尝试迁移旧 history
+        if let Some(migrated) = migrate_legacy_history() {
+            return migrated;
+        }
+        return Vec::new();
     }
-    if llm.exists() {
-        std::fs::remove_file(&llm).map_err(|e| e.to_string())?;
+    let mut out = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) != Some("json") {
+                continue;
+            }
+            match load_json_file::<SessionData>(&path) {
+                Ok(s) => out.push(s),
+                Err(e) => tracing::warn!(path = %path.display(), err = %e, "跳过损坏的会话文件"),
+            }
+        }
+    }
+    out
+}
+
+/// 把旧版单文件历史迁移成默认会话；迁移成功后删除旧文件
+fn migrate_legacy_history() -> Option<Vec<SessionData>> {
+    let ui_path = legacy_agent_history_path();
+    let llm_path = legacy_agent_llm_history_path();
+    if !ui_path.exists() && !llm_path.exists() {
+        return None;
+    }
+    tracing::info!("检测到旧版 Agent 历史，开始迁移到多会话目录");
+    let ui_msgs: Vec<AgentUiMsg> = load_json_file(&ui_path).unwrap_or_default();
+    let llm_msgs: Vec<xhh_agent::provider::ChatMessage> = load_json_file(&llm_path).unwrap_or_default();
+    let id = new_session_id();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let title = ui_msgs
+        .iter()
+        .find(|m| m.role == "user")
+        .map(|m| truncate_text(&m.text, 20))
+        .unwrap_or_else(|| "迁移的会话".to_string());
+    let session = SessionData {
+        id: id.clone(),
+        title,
+        messages: if llm_msgs.is_empty() {
+            vec![xhh_agent::provider::ChatMessage::system(xhh_agent::prompt::SYSTEM_PROMPT)]
+        } else {
+            llm_msgs
+        },
+        ui_messages: ui_msgs,
+        created_at: now,
+        updated_at: now,
+        pending_resume: None,
+    };
+    let _ = save_json_file(&agent_session_path(&id), &session);
+    let _ = std::fs::remove_file(&ui_path);
+    let _ = std::fs::remove_file(&llm_path);
+    Some(vec![session])
+}
+
+/// 持久化单个会话到磁盘
+fn persist_session(session: &SessionData) {
+    let path = agent_session_path(&session.id);
+    if let Err(e) = save_json_file(&path, session) {
+        tracing::warn!(session_id = %session.id, err = %e, "保存会话失败");
+    }
+}
+
+/// 删除磁盘上的会话文件
+fn delete_session_file(id: &str) {
+    let path = agent_session_path(id);
+    if path.exists() {
+        let _ = std::fs::remove_file(&path);
+    }
+}
+
+/// 取活跃会话的快照（避免在锁外读路径）
+fn snapshot_active(sessions: &AgentSessions) -> Option<SessionData> {
+    sessions.active().cloned()
+}
+
+fn truncate_text(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        s.to_string()
+    } else {
+        let mut t: String = s.chars().take(max).collect();
+        t.push('…');
+        t
+    }
+}
+
+// ─── Agent Sessions：运行时懒加载 ────────────────────────
+
+/// 确保 runner 已构建 + sessions 已加载（首次调用时执行）
+async fn ensure_agent_runtime(state: &AppState) -> Result<(), String> {
+    // runner 懒加载
+    let mut runner_guard = state.agent_runner.lock().await;
+    if runner_guard.is_none() {
+        let runner = build_agent_runner(state)?;
+        *runner_guard = Some(runner);
+    }
+    drop(runner_guard);
+
+    // sessions 加载（仅当内存为空时）
+    let mut sessions = state.agent_sessions.lock().await;
+    if sessions.sessions.is_empty() {
+        let loaded = load_all_sessions_from_disk();
+        for s in loaded {
+            sessions.sessions.insert(s.id.clone(), s);
+        }
+        if sessions.sessions.is_empty() {
+            // 完全新用户：创建一个默认空会话
+            let s = SessionData::new(new_session_id());
+            sessions.insert(s);
+        } else if sessions.active_id.is_empty() {
+            // 选取 updated_at 最大的作为活跃
+            sessions.active_id = sessions
+                .sessions
+                .values()
+                .max_by_key(|s| s.updated_at)
+                .map(|s| s.id.clone())
+                .unwrap_or_default();
+        }
+    }
+    if sessions.active_id.is_empty() {
+        let s = SessionData::new(new_session_id());
+        sessions.insert(s);
+        let snap = sessions.active().cloned();
+        drop(sessions);
+        if let Some(snap) = snap {
+            persist_session(&snap);
+        }
     }
     Ok(())
 }
 
-/// 读取 LLM ChatMessage 历史用于 Agent session 初始化
-fn load_llm_messages() -> Vec<xhh_agent::provider::ChatMessage> {
-    let path = agent_llm_history_path();
-    load_json_file::<Vec<xhh_agent::provider::ChatMessage>>(&path).unwrap_or_default()
+// ─── Agent Sessions：Tauri 命令 ──────────────────────────
+
+/// 列出所有会话（按 updated_at 倒序）
+#[tauri::command]
+pub async fn agent_session_list(
+    state: State<'_, AppState>,
+) -> Result<Vec<SessionMeta>, String> {
+    ensure_agent_runtime(&state).await?;
+    let sessions = state.agent_sessions.lock().await;
+    Ok(sessions.list_meta())
 }
 
-/// 持久化 LLM ChatMessage 历史
-fn save_llm_messages(msgs: &[xhh_agent::provider::ChatMessage]) {
-    let path = agent_llm_history_path();
-    if let Err(e) = save_json_file(&path, &msgs) {
-        tracing::warn!("保存 Agent LLM 历史失败: {}", e);
+/// 当前活跃会话 ID
+#[tauri::command]
+pub async fn agent_session_active(state: State<'_, AppState>) -> Result<String, String> {
+    ensure_agent_runtime(&state).await?;
+    let sessions = state.agent_sessions.lock().await;
+    Ok(sessions.active_id.clone())
+}
+
+/// 新建空会话，返回 id（同时切到该会话）
+#[tauri::command]
+pub async fn agent_session_create(state: State<'_, AppState>) -> Result<String, String> {
+    ensure_agent_runtime(&state).await?;
+    let mut sessions = state.agent_sessions.lock().await;
+    let session = SessionData::new(new_session_id());
+    let id = session.id.clone();
+    sessions.insert(session);
+    let snap = sessions.active().cloned();
+    drop(sessions);
+    if let Some(snap) = snap {
+        persist_session(&snap);
     }
+    Ok(id)
+}
+
+/// 切换活跃会话；返回该会话的 UI 消息列表
+#[tauri::command]
+pub async fn agent_session_switch(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<Vec<AgentUiMsg>, String> {
+    ensure_agent_runtime(&state).await?;
+    let mut sessions = state.agent_sessions.lock().await;
+    sessions.switch(&id)?;
+    Ok(sessions.active().map(|s| s.ui_messages.clone()).unwrap_or_default())
+}
+
+/// 重命名会话
+#[tauri::command]
+pub async fn agent_session_rename(
+    state: State<'_, AppState>,
+    id: String,
+    title: String,
+) -> Result<(), String> {
+    ensure_agent_runtime(&state).await?;
+    let mut sessions = state.agent_sessions.lock().await;
+    let session = sessions
+        .sessions
+        .get_mut(&id)
+        .ok_or_else(|| format!("会话不存在: {}", id))?;
+    session.title = title;
+    session.touch();
+    let snap = session.clone();
+    drop(sessions);
+    persist_session(&snap);
+    Ok(())
+}
+
+/// 删除会话（删当前活跃会话时自动切到下一个；全删完则补一个新空会话）
+#[tauri::command]
+pub async fn agent_session_delete(state: State<'_, AppState>, id: String) -> Result<String, String> {
+    let mut sessions = state.agent_sessions.lock().await;
+    let removed = sessions.remove(&id).ok_or_else(|| format!("会话不存在: {}", id))?;
+    delete_session_file(&removed.id);
+    if sessions.sessions.is_empty() {
+        let s = SessionData::new(new_session_id());
+        sessions.insert(s);
+    }
+    let snap = sessions.active().cloned();
+    let active_id = sessions.active_id.clone();
+    drop(sessions);
+    if let Some(snap) = snap {
+        persist_session(&snap);
+    }
+    Ok(active_id)
+}
+
+// ─── Agent History（向后兼容：操作活跃会话的 ui_messages） ───
+
+/// 读取当前活跃会话的 UI 消息
+#[tauri::command]
+pub async fn agent_history_get(state: State<'_, AppState>) -> Result<Vec<AgentUiMsg>, String> {
+    ensure_agent_runtime(&state).await?;
+    let sessions = state.agent_sessions.lock().await;
+    Ok(sessions.active().map(|s| s.ui_messages.clone()).unwrap_or_default())
+}
+
+/// 保存当前活跃会话的 UI 消息；同时根据首条用户消息更新会话标题
+#[tauri::command]
+pub async fn agent_history_save(
+    state: State<'_, AppState>,
+    messages: Vec<AgentUiMsg>,
+) -> Result<(), String> {
+    let mut sessions = state.agent_sessions.lock().await;
+    let session = sessions
+        .active_mut()
+        .ok_or_else(|| "无活跃会话".to_string())?;
+    let needs_rename = session.title == "新会话";
+    let new_title = if needs_rename {
+        messages
+            .iter()
+            .find(|m| m.role == "user")
+            .map(|m| truncate_text(&m.text, 20))
+    } else {
+        None
+    };
+    session.ui_messages = messages;
+    if let Some(t) = new_title {
+        session.title = t;
+    }
+    session.touch();
+    let snap = session.clone();
+    drop(sessions);
+    persist_session(&snap);
+    Ok(())
+}
+
+/// 清空当前活跃会话的 UI 消息（保留会话本身；LLM 消息保留）
+#[tauri::command]
+pub async fn agent_history_clear(state: State<'_, AppState>) -> Result<(), String> {
+    ensure_agent_runtime(&state).await?;
+    let mut sessions = state.agent_sessions.lock().await;
+    if let Some(session) = sessions.active_mut() {
+        session.ui_messages.clear();
+        session.touch();
+        let snap = session.clone();
+        drop(sessions);
+        persist_session(&snap);
+    }
+    Ok(())
+}
+
+// ─── Agent Templates ─────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentTemplate {
+    pub id: String,
+    pub title: String,
+    pub content: String,
+    pub is_builtin: bool,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+/// 内置模板种子（首次启动写入 JSON 文件，用户后续可编辑/删除）
+fn builtin_templates() -> Vec<AgentTemplate> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let items: &[(&str, &str)] = &[
+        (
+            "分析指定板块热帖并总结互动切入点",
+            "请用 search_community 找到「原神」板块，然后用 community_feeds 拉取最近热帖，最后总结 3-5 个适合我参与互动的切入点。",
+        ),
+        (
+            "帮我在原神板块发一条 100 字内的日常帖",
+            "帮我在原神板块发一条 100 字内的日常帖子，标题和内容由你拟定，语气要像一个真实玩家，不要列要点。",
+        ),
+        (
+            "拉取我的通知，总结今天谁@了我",
+            "拉取我最近的通知列表，把今天 @ 我的人和他们说的话总结成简短列表。",
+        ),
+        (
+            "查看我最近的帖子，把零评论的列出来",
+            "查看我最近发布的 10 篇帖子，把还没有评论的帖子标题和链接列出来。",
+        ),
+        (
+            "搜索『黑神话』相关帖子，挑 3 条适合点赞的",
+            "搜索关键词『黑神话』，从结果里挑 3 条内容质量较高的帖子，告诉我标题和理由，然后帮我点赞。",
+        ),
+    ];
+    items
+        .iter()
+        .enumerate()
+        .map(|(i, (title, content))| AgentTemplate {
+            id: format!("builtin-{}", i + 1),
+            title: title.to_string(),
+            content: content.to_string(),
+            is_builtin: true,
+            created_at: now,
+            updated_at: now,
+        })
+        .collect()
+}
+
+fn load_templates_from_disk() -> Vec<AgentTemplate> {
+    let path = agent_templates_path();
+    let mut disk: Vec<AgentTemplate> = if path.exists() {
+        load_json_file::<Vec<AgentTemplate>>(&path).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    // 始终补回缺失的内置模板（即使用户曾删除过）
+    let mut changed = false;
+    for builtin in builtin_templates() {
+        if !disk.iter().any(|t| t.id == builtin.id) {
+            disk.push(builtin);
+            changed = true;
+        }
+    }
+    if changed || !path.exists() {
+        let _ = save_json_file(&path, &disk.to_vec());
+    }
+    disk
+}
+
+fn save_templates_to_disk(templates: &[AgentTemplate]) -> Result<(), String> {
+    save_json_file(&agent_templates_path(), &templates.to_vec())
+}
+
+/// 列出所有模板（按 updated_at 倒序，内置在前）
+#[tauri::command]
+pub async fn agent_template_list() -> Result<Vec<AgentTemplate>, String> {
+    let mut templates = load_templates_from_disk();
+    templates.sort_by(|a, b| {
+        b.is_builtin
+            .cmp(&a.is_builtin)
+            .then_with(|| b.updated_at.cmp(&a.updated_at))
+    });
+    Ok(templates)
+}
+
+/// 新建或更新模板：
+/// - 不传 id（或 id 为空）= 新建，自动生成 id；title 为空时用 content 前 20 字
+/// - 传 id = 更新已存在模板
+#[tauri::command]
+pub async fn agent_template_save(
+    id: Option<String>,
+    title: String,
+    content: String,
+) -> Result<AgentTemplate, String> {
+    let mut templates = load_templates_from_disk();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let resolved_title = if title.trim().is_empty() {
+        truncate_text(content.trim(), 20)
+    } else {
+        title.trim().to_string()
+    };
+    if let Some(id) = id.filter(|s| !s.is_empty()) {
+        let t = templates
+            .iter_mut()
+            .find(|t| t.id == id)
+            .ok_or_else(|| format!("模板不存在: {}", id))?;
+        t.title = resolved_title;
+        t.content = content;
+        t.updated_at = now;
+        let snapshot = t.clone();
+        save_templates_to_disk(&templates)?;
+        return Ok(snapshot);
+    }
+    let new_id = {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        format!("t_{:x}_{:06x}", (ts >> 24) as u64, (ts % 0x100_0000) as u32)
+    };
+    let template = AgentTemplate {
+        id: new_id,
+        title: resolved_title,
+        content,
+        is_builtin: false,
+        created_at: now,
+        updated_at: now,
+    };
+    templates.push(template.clone());
+    save_templates_to_disk(&templates)?;
+    Ok(template)
+}
+
+/// 删除模板（含内置）
+#[tauri::command]
+pub async fn agent_template_delete(id: String) -> Result<(), String> {
+    let mut templates = load_templates_from_disk();
+    let before = templates.len();
+    templates.retain(|t| t.id != id);
+    if templates.len() == before {
+        return Err(format!("模板不存在: {}", id));
+    }
+    save_templates_to_disk(&templates)
 }
 
 /// AI 分析帖子（总结/图片识别/评论概览），流式输出
@@ -1517,22 +1953,7 @@ pub async fn agent_chat_stream(
     use xhh_agent::config::ProviderKind;
     use xhh_agent::provider::ChatMessage;
 
-    // 复用 Agent 会话，优先加载持久化的 LLM 历史
-    {
-        let mut guard = state.agent.lock().await;
-        if guard.is_none() {
-            let runner = build_agent_runner(&state)?;
-            let mut session = AgentSession::new(runner);
-            let saved = load_llm_messages();
-            if !saved.is_empty() {
-                tracing::info!(count = saved.len(), "加载持久化的 Agent LLM 历史");
-                session.messages = saved;
-            }
-            *guard = Some(session);
-        }
-    }
-    let mut guard = state.agent.lock().await;
-    let session = guard.as_mut().ok_or("Agent 会话未初始化")?;
+    ensure_agent_runtime(&state).await?;
 
     let ac = xhh_agent::config::AgentConfig::load(None).map_err(|e| e.to_string())?;
     let confirmations = confirmations.unwrap_or_default();
@@ -1544,46 +1965,59 @@ pub async fn agent_chat_stream(
     let c = state.require_client().await?;
     let max_loops = ac.max_loops.max(1);
 
-    let mut resume_pending = if has_confirmation_decisions {
-        session.pending_resume.take()
-    } else {
-        session.pending_resume = None;
-        None
+    // 短锁：取活跃 session 的 messages 快照 + pending_resume 状态，立即释放锁
+    let (mut messages_snapshot, mut resume_pending, loops_init, tools_init): (
+        Vec<ChatMessage>,
+        Option<StreamOutput>,
+        u32,
+        Vec<String>,
+    ) = {
+        let mut sessions = state.agent_sessions.lock().await;
+        let session = sessions
+            .active_mut()
+            .ok_or("Agent 会话未初始化")?;
+        let pending = if has_confirmation_decisions {
+            session.pending_resume.take()
+        } else {
+            session.pending_resume = None;
+            None
+        };
+        if has_confirmation_decisions && pending.is_none() {
+            return Err("没有等待确认的工具调用".into());
+        }
+        if pending.is_none() {
+            session.messages.push(ChatMessage::user(message));
+        }
+        let loops = pending.as_ref().map_or(0, |p| p.loops_used);
+        let tools = pending
+            .as_ref()
+            .map_or_else(Vec::new, |p| p.completed_tool_calls.clone());
+        let resume = pending.map(|p| StreamOutput {
+            content: String::new(),
+            tool_calls: p.tool_calls,
+        });
+        (session.messages.clone(), resume, loops, tools)
     };
-    if has_confirmation_decisions && resume_pending.is_none() {
-        return Err("没有等待确认的工具调用".into());
-    }
 
-    if resume_pending.is_none() {
-        session.messages.push(ChatMessage::user(message));
-        save_llm_messages(&session.messages);
-    }
-
-    let mut loops_used = resume_pending
-        .as_ref()
-        .map_or(0, |pending| pending.loops_used);
-    let mut all_tool_calls = resume_pending
-        .as_ref()
-        .map_or_else(Vec::new, |pending| pending.completed_tool_calls.clone());
+    let mut loops_used = loops_init;
+    let mut all_tool_calls = tools_init;
 
     loop {
         let is_resuming = resume_pending.is_some();
         let output = if let Some(pending) = resume_pending.take() {
-            StreamOutput {
-                content: String::new(),
-                tool_calls: pending.tool_calls,
-            }
+            pending
         } else {
             if loops_used >= max_loops {
                 break;
             }
             loops_used += 1;
+            // LLM 流式调用：不持有 sessions 锁
             let out = match &provider_kind {
                 ProviderKind::OpenAi(cfg) => {
                     stream_agent_openai(
                         &app,
                         cfg,
-                        session.messages.clone(),
+                        messages_snapshot.clone(),
                         specs.clone(),
                         ac.temperature,
                     )
@@ -1593,7 +2027,7 @@ pub async fn agent_chat_stream(
                     stream_agent_anthropic(
                         &app,
                         cfg,
-                        session.messages.clone(),
+                        messages_snapshot.clone(),
                         specs.clone(),
                         ac.temperature,
                     )
@@ -1603,7 +2037,7 @@ pub async fn agent_chat_stream(
                     stream_agent_ollama(
                         &app,
                         cfg,
-                        session.messages.clone(),
+                        messages_snapshot.clone(),
                         specs.clone(),
                         ac.temperature,
                     )
@@ -1613,6 +2047,9 @@ pub async fn agent_chat_stream(
             match out {
                 Ok(o) => o,
                 Err(e) => {
+                    // 短锁：写回 messages + touch，锁外持久化
+                    let snap = flush_messages(&state, &messages_snapshot).await;
+                    persist_session(&snap);
                     let _ = app.emit("agent-error", &e);
                     return Err(e);
                 }
@@ -1620,13 +2057,14 @@ pub async fn agent_chat_stream(
         };
 
         if !is_resuming && (!output.content.is_empty() || !output.tool_calls.is_empty()) {
-            session.messages.push(ChatMessage::assistant_with_tools(
+            messages_snapshot.push(ChatMessage::assistant_with_tools(
                 output.content.clone(),
                 output.tool_calls.clone(),
             ));
         }
 
         if !output.tool_calls.is_empty() {
+            // 危险工具确认检查
             if ac.confirm_dangerous_tools {
                 for tc in &output.tool_calls {
                     let Some(t) = tool_reg.get(&tc.name) else {
@@ -1649,13 +2087,22 @@ pub async fn agent_chat_stream(
                         summary: confirmation.summary,
                         arguments_json: confirmation.arguments_json,
                     };
-                    // 保存当前 tool_calls 快照，确认后直接恢复
-                    session.pending_resume = Some(crate::state::PendingResume {
-                        tool_calls: output.tool_calls.clone(),
-                        loops_used,
-                        completed_tool_calls: all_tool_calls.clone(),
-                    });
-                    save_llm_messages(&session.messages);
+                    // 短锁：写回 messages + pending_resume + touch
+                    let snap = {
+                        let mut sessions = state.agent_sessions.lock().await;
+                        let session = sessions
+                            .active_mut()
+                            .ok_or("Agent 会话未初始化")?;
+                        session.messages = messages_snapshot.clone();
+                        session.pending_resume = Some(crate::state::PendingResume {
+                            tool_calls: output.tool_calls.clone(),
+                            loops_used,
+                            completed_tool_calls: all_tool_calls.clone(),
+                        });
+                        session.touch();
+                        session.clone()
+                    };
+                    persist_session(&snap);
                     let _ = app.emit("agent-tool-confirmation", &request);
                     let _ = app.emit(
                         "agent-error",
@@ -1665,7 +2112,7 @@ pub async fn agent_chat_stream(
                 }
             }
 
-            // 执行工具调用
+            // 工具执行：不持有 sessions 锁
             for tc in &output.tool_calls {
                 all_tool_calls.push(tc.name.clone());
                 let _ = app.emit("agent-tool", &tc.name);
@@ -1692,24 +2139,47 @@ pub async fn agent_chat_stream(
                         .unwrap_or_else(|e| format!("工具调用失败: {}", e)),
                     None => format!("工具 {} 不存在", tc.name),
                 };
-                session
-                    .messages
-                    .push(ChatMessage::tool(&tc.id, &tc.name, &tool_result));
+                messages_snapshot.push(ChatMessage::tool(&tc.id, &tc.name, &tool_result));
             }
-            save_llm_messages(&session.messages);
-        } else {
-            save_llm_messages(&session.messages);
-            let _ = app.emit(
-                "agent-done",
-                serde_json::json!({ "tool_calls": all_tool_calls, "loops_used": loops_used }),
-            );
-            return Ok(());
+
+            // 短锁：写回 + 锁外持久化
+            let snap = flush_messages(&state, &messages_snapshot).await;
+            persist_session(&snap);
+            // 工具调用完成，进入下一轮让 LLM 处理工具结果
+            continue;
         }
+
+        // 完成：短锁 + 锁外持久化
+        let snap = flush_messages(&state, &messages_snapshot).await;
+        persist_session(&snap);
+        let _ = app.emit(
+            "agent-done",
+            serde_json::json!({ "tool_calls": all_tool_calls, "loops_used": loops_used }),
+        );
+        return Ok(());
     }
 
-    save_llm_messages(&session.messages);
+    // 达到 max_loops：短锁 + 锁外持久化
+    let snap = flush_messages(&state, &messages_snapshot).await;
+    persist_session(&snap);
     let _ = app.emit("agent-error", "达到最大循环次数");
     Err("达到最大循环次数".into())
+}
+
+/// 把当前 messages 写回活跃 session 并 touch，返回 clone 的 session 快照供锁外持久化
+async fn flush_messages(state: &AppState, messages: &[xhh_agent::provider::ChatMessage]) -> SessionData {
+    let mut sessions = state.agent_sessions.lock().await;
+    match sessions.active_mut() {
+        Some(session) => {
+            session.messages = messages.to_vec();
+            session.touch();
+            session.clone()
+        }
+        None => {
+            // 极端情况：会话被并发删除。返回一个空快照避免 panic，调用方 persist_session 仍会写入一个孤儿文件
+            SessionData::new("__orphan__".to_string())
+        }
+    }
 }
 
 /// 下载远程图片并转为 data URI

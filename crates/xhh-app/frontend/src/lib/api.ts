@@ -147,6 +147,56 @@ export const agentHistorySave = (messages: AgentUiMsg[]): Promise<void> =>
 export const agentHistoryClear = (): Promise<void> =>
   invoke("agent_history_clear");
 
+// Agent sessions（多会话切换）
+export interface SessionMeta {
+  id: string;
+  title: string;
+  created_at: number;
+  updated_at: number;
+  message_count: number;
+}
+
+export const agentSessionList = (): Promise<SessionMeta[]> =>
+  invoke("agent_session_list");
+
+export const agentSessionActive = (): Promise<string> =>
+  invoke("agent_session_active");
+
+export const agentSessionCreate = (): Promise<string> =>
+  invoke("agent_session_create");
+
+export const agentSessionSwitch = (id: string): Promise<AgentUiMsg[]> =>
+  invoke("agent_session_switch", { id });
+
+export const agentSessionRename = (id: string, title: string): Promise<void> =>
+  invoke("agent_session_rename", { id, title });
+
+export const agentSessionDelete = (id: string): Promise<string> =>
+  invoke("agent_session_delete", { id });
+
+// Agent templates（任务模板）
+export interface AgentTemplate {
+  id: string;
+  title: string;
+  content: string;
+  is_builtin: boolean;
+  created_at: number;
+  updated_at: number;
+}
+
+export const agentTemplateList = (): Promise<AgentTemplate[]> =>
+  invoke("agent_template_list");
+
+export const agentTemplateSave = (
+  title: string,
+  content: string,
+  id?: string,
+): Promise<AgentTemplate> =>
+  invoke("agent_template_save", { id: id ?? null, title, content });
+
+export const agentTemplateDelete = (id: string): Promise<void> =>
+  invoke("agent_template_delete", { id });
+
 // Agent (streaming)
 export interface AgentStreamDone {
   tool_calls: string[];

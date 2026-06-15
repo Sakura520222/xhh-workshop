@@ -69,6 +69,17 @@ pub fn run() {
             commands::agent_reset,
             commands::agent_get_config,
             commands::agent_save_config,
+            // agent sessions
+            commands::agent_session_list,
+            commands::agent_session_active,
+            commands::agent_session_create,
+            commands::agent_session_switch,
+            commands::agent_session_rename,
+            commands::agent_session_delete,
+            // agent templates
+            commands::agent_template_list,
+            commands::agent_template_save,
+            commands::agent_template_delete,
             // ai
             commands::ai_analyze_stream,
             commands::ai_cache_get,

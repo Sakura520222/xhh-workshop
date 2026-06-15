@@ -1,9 +1,32 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { agentChatStream, agentReset, agentHistoryGet, agentHistorySave, agentHistoryClear, postDetail, subComments, type AgentStreamDone, type AgentToolConfirmationDecision, type AgentToolConfirmationRequest } from "../lib/api";
+  import {
+    agentChatStream,
+    agentReset,
+    agentHistoryGet,
+    agentHistorySave,
+    agentHistoryClear,
+    agentSessionList,
+    agentSessionCreate,
+    agentSessionSwitch,
+    agentSessionRename,
+    agentSessionDelete,
+    agentTemplateList,
+    agentTemplateSave,
+    agentTemplateDelete,
+    postDetail,
+    subComments,
+    type AgentStreamDone,
+    type AgentToolConfirmationDecision,
+    type AgentToolConfirmationRequest,
+    type SessionMeta,
+    type AgentTemplate,
+  } from "../lib/api";
   import type { AgentUiMsg } from "../lib/api";
   import { parsePostContent } from "../lib/content";
   import { preloadEmoji, renderAiMarkdown } from "../lib/render.svelte";
+  import AgentSidebar from "../components/AgentSidebar.svelte";
+  import TemplateEditor from "../components/TemplateEditor.svelte";
 
   type ChatMsg = {
     role: "user" | "assistant";
@@ -50,6 +73,26 @@
   let operationNotice = $state("");
   let deletePreviewRequestId = 0;
   let operationNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // 多会话 + 模板状态
+  let sessions = $state<SessionMeta[]>([]);
+  let activeSessionId = $state("");
+  let templates = $state<AgentTemplate[]>([]);
+  let templatesCollapsed = $state(false);
+  let editingTemplate = $state<AgentTemplate | null>(null);
+  let templateEditorOpen = $state(false);
+  let templateToast = $state("");
+
+  const TEMPLATES_COLLAPSED_KEY = "xhh_agent_templates_collapsed";
+
+  function loadTemplatesCollapsed() {
+    try {
+      return localStorage.getItem(TEMPLATES_COLLAPSED_KEY) === "1";
+    } catch { return false; }
+  }
+  function saveTemplatesCollapsed(v: boolean) {
+    try { localStorage.setItem(TEMPLATES_COLLAPSED_KEY, v ? "1" : "0"); } catch { /* ignore */ }
+  }
 
   const POST_DETAIL_PAGE_LIMIT = 10;
   const SUB_COMMENT_PAGE_LIMIT = 10;
@@ -250,7 +293,142 @@
 
   async function persist() {
     const ui = messages.filter(m => !m.streaming && !m.error).map(toUiMsg);
-    try { await agentHistorySave(ui); } catch { /* ignore */ }
+    try {
+      await agentHistorySave(ui);
+      // 标题可能在后端自动更新了，刷新会话列表
+      await refreshSessions();
+    } catch { /* ignore */ }
+  }
+
+  async function refreshSessions() {
+    try {
+      sessions = await agentSessionList();
+      // active_id 可能因新建/删除而变化，重新读一次
+      const newActive = await (await import("../lib/api")).agentSessionActive();
+      activeSessionId = newActive;
+    } catch { /* ignore */ }
+  }
+
+  async function refreshTemplates() {
+    try {
+      templates = await agentTemplateList();
+    } catch { /* ignore */ }
+  }
+
+  async function handleCreateSession() {
+    if (busy) return;
+    try {
+      const id = await agentSessionCreate();
+      activeSessionId = id;
+      messages = [];
+      await refreshSessions();
+      focusMessageInput();
+    } catch (e) {
+      console.error("create session failed:", e);
+    }
+  }
+
+  async function handleSelectSession(id: string) {
+    if (busy || id === activeSessionId) return;
+    try {
+      const uiMsgs = await agentSessionSwitch(id);
+      activeSessionId = id;
+      messages = uiMsgs.map(m => ({
+        role: m.role as "user" | "assistant",
+        text: m.text,
+        tools: m.tools,
+        loops: m.loops,
+        streaming: false,
+        error: false,
+      }));
+      scrollBottom();
+    } catch (e) {
+      console.error("switch session failed:", e);
+    }
+  }
+
+  async function handleRenameSession(id: string, title: string) {
+    try {
+      await agentSessionRename(id, title);
+      await refreshSessions();
+    } catch (e) {
+      console.error("rename session failed:", e);
+    }
+  }
+
+  async function handleDeleteSession(id: string) {
+    if (busy) return;
+    try {
+      const newActiveId = await agentSessionDelete(id);
+      activeSessionId = newActiveId;
+      // 重新加载当前活跃会话的 messages
+      const uiMsgs = await agentHistoryGet();
+      messages = uiMsgs.map(m => ({
+        role: m.role as "user" | "assistant",
+        text: m.text,
+        tools: m.tools,
+        loops: m.loops,
+        streaming: false,
+        error: false,
+      }));
+      await refreshSessions();
+      scrollBottom();
+    } catch (e) {
+      console.error("delete session failed:", e);
+    }
+  }
+
+  function toggleTemplates() {
+    templatesCollapsed = !templatesCollapsed;
+    saveTemplatesCollapsed(templatesCollapsed);
+  }
+
+  function handleInsertTemplate(t: AgentTemplate) {
+    input = t.content;
+    setTimeout(() => messageInput?.focus(), 0);
+  }
+
+  function handleEditTemplate(t: AgentTemplate) {
+    editingTemplate = t;
+    templateEditorOpen = true;
+  }
+
+  function handleCreateTemplate() {
+    editingTemplate = null;
+    templateEditorOpen = true;
+  }
+
+  async function handleSaveAsTemplate() {
+    const text = input.trim();
+    if (!text) return;
+    try {
+      await agentTemplateSave("", text);
+      await refreshTemplates();
+      showTemplateToast("已保存为模板");
+    } catch (e) {
+      console.error("save as template failed:", e);
+    }
+  }
+
+  async function handleCommitTemplate(title: string, content: string, id: string | null) {
+    await agentTemplateSave(title, content, id ?? undefined);
+    await refreshTemplates();
+    templateEditorOpen = false;
+    editingTemplate = null;
+    showTemplateToast(id ? "模板已更新" : "模板已创建");
+  }
+
+  async function handleDeleteTemplate(id: string) {
+    await agentTemplateDelete(id);
+    await refreshTemplates();
+    templateEditorOpen = false;
+    editingTemplate = null;
+    showTemplateToast("模板已删除");
+  }
+
+  function showTemplateToast(text: string) {
+    templateToast = text;
+    setTimeout(() => { templateToast = ""; }, 2000);
   }
 
   function startAgentStream(text: string, confirmations: AgentToolConfirmationDecision[] = []) {
@@ -380,8 +558,8 @@
     if (busy) return;
     try {
       await agentReset();
-      await agentHistoryClear();
       messages = [];
+      await refreshSessions();
     } catch (e) {
       console.error(e);
     }
@@ -412,7 +590,13 @@
 
   onMount(async () => {
     preloadEmoji();
+    templatesCollapsed = loadTemplatesCollapsed();
     try {
+      const [sessionList, tplList] = await Promise.all([agentSessionList(), agentTemplateList()]);
+      sessions = sessionList;
+      templates = tplList;
+      activeSessionId = await (await import("../lib/api")).agentSessionActive();
+      // 加载当前活跃会话的 UI 历史
       const saved = await agentHistoryGet();
       if (saved && saved.length > 0) {
         messages = saved.map(m => ({
@@ -433,7 +617,25 @@
 
 <svelte:window onkeydown={handleWindowKeydown} />
 
-<div class="agent-page" inert={pendingConfirmation !== null}>
+<div class="agent-layout" inert={pendingConfirmation !== null}>
+  <AgentSidebar
+    {sessions}
+    activeId={activeSessionId}
+    {busy}
+    {templates}
+    {templatesCollapsed}
+    onToggleTemplates={toggleTemplates}
+    onCreateSession={handleCreateSession}
+    onSelectSession={handleSelectSession}
+    onRenameSession={handleRenameSession}
+    onDeleteSession={handleDeleteSession}
+    onInsertTemplate={handleInsertTemplate}
+    onEditTemplate={handleEditTemplate}
+    onCreateTemplate={handleCreateTemplate}
+    onDeleteTemplate={(id: string) => agentTemplateDelete(id).then(refreshTemplates)}
+  />
+
+  <div class="agent-page">
   <section class="agent-hero">
     <div class="hero-copy">
       <div class="hero-title">
@@ -511,12 +713,34 @@
         rows="2"
         aria-label="Agent 消息输入"
       ></textarea>
+      <button
+        class="save-tpl-btn"
+        onclick={handleSaveAsTemplate}
+        disabled={busy || !input.trim()}
+        title="将输入框内容保存为模板"
+      >
+        存为模板
+      </button>
       <button class="send-btn" onclick={send} disabled={busy || !input.trim()}>
         {busy ? "执行中" : "发送"}
       </button>
     </div>
   </section>
-</div>
+  </div><!-- /.agent-page -->
+</div><!-- /.agent-layout -->
+
+{#if templateToast}
+  <div class="tpl-toast" role="status" aria-live="polite">{templateToast}</div>
+{/if}
+
+{#if templateEditorOpen}
+  <TemplateEditor
+    template={editingTemplate}
+    onCommit={handleCommitTemplate}
+    onDelete={handleDeleteTemplate}
+    onClose={() => { templateEditorOpen = false; editingTemplate = null; }}
+  />
+{/if}
 
 {#if pendingConfirmation}
   <div class="confirm-backdrop">
@@ -620,9 +844,19 @@
 {/if}
 
 <style>
+  .agent-layout {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
   .agent-page {
-    width: min(1040px, 100%);
+    flex: 1;
+    min-width: 0;
+    max-width: 1080px;
     margin: 0 auto;
+    padding: 0 18px;
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -965,6 +1199,50 @@
     padding: 16px;
     border-top: 1px solid rgba(148, 163, 184, 0.14);
     background: color-mix(in srgb, var(--bg) 28%, transparent);
+  }
+
+  .save-tpl-btn {
+    align-self: stretch;
+    padding: 0 16px;
+    border-radius: 14px;
+    background: rgba(148, 163, 184, 0.12);
+    color: var(--text-secondary);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    font-size: 13px;
+    font-weight: 650;
+    transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out);
+  }
+
+  .save-tpl-btn:hover:not(:disabled) {
+    background: rgba(148, 163, 184, 0.2);
+    color: var(--text-strong);
+    border-color: rgba(148, 163, 184, 0.32);
+  }
+
+  .save-tpl-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .tpl-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1200;
+    padding: 10px 18px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--accent) 18%, var(--bg-soft));
+    color: var(--text-strong);
+    border: 1px solid color-mix(in srgb, var(--accent-hover) 32%, transparent);
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: var(--elevation-2);
+    animation: tpl-toast-in 200ms var(--ease-out);
+  }
+
+  @keyframes tpl-toast-in {
+    from { opacity: 0; transform: translate(-50%, 8px); }
   }
 
   .confirm-backdrop {

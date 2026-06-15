@@ -25,6 +25,7 @@
   import type { AgentUiMsg } from "../lib/api";
   import { parsePostContent } from "../lib/content";
   import { preloadEmoji, renderAiMarkdown } from "../lib/render.svelte";
+  import { getView } from "../lib/stores.svelte";
   import AgentSidebar from "../components/AgentSidebar.svelte";
   import TemplateEditor from "../components/TemplateEditor.svelte";
 
@@ -573,6 +574,9 @@
   }
 
   function handleWindowKeydown(e: KeyboardEvent) {
+    // Agent 常驻挂载后，svelte:window 监听器全局生效；
+    // 仅在当前位于 Agent 视图时响应 Escape，避免切到其他页面后误触发取消
+    if (getView() !== "agent") return;
     if (e.key === "Escape" && pendingConfirmation && !busy) {
       e.preventDefault();
       denyDangerousTool();

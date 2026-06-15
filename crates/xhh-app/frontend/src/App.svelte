@@ -57,26 +57,34 @@
   <div class="main-layout">
     <Sidebar />
     <main class="content" aria-label="主内容区">
-      {#if getView() === "home"}
-        <Home />
-      {:else if getView() === "detail"}
-        <PostDetail />
-      {:else if getView() === "editor"}
-        <Editor />
-      {:else if getView() === "profile"}
-        <Profile />
-      {:else if getView() === "agent"}
+      <!-- Agent 常驻挂载（keep-alive）：切换页面时仅隐藏，保留流式状态/消息/确认弹窗 -->
+      <div
+        class="agent-mount"
+        class:hidden={getView() !== "agent"}
+        aria-hidden={getView() !== "agent"}
+      >
         <Agent />
-      {:else if getView() === "settings"}
-        <Settings />
-      {:else if getView() === "search"}
-        <Search />
-      {:else if getView() === "notifications"}
-        <Notifications />
-      {:else if getView() === "favourites"}
-        <Favourites />
-      {:else if getView() === "user"}
-        <UserView />
+      </div>
+      {#if getView() !== "agent"}
+        {#if getView() === "home"}
+          <Home />
+        {:else if getView() === "detail"}
+          <PostDetail />
+        {:else if getView() === "editor"}
+          <Editor />
+        {:else if getView() === "profile"}
+          <Profile />
+        {:else if getView() === "settings"}
+          <Settings />
+        {:else if getView() === "search"}
+          <Search />
+        {:else if getView() === "notifications"}
+          <Notifications />
+        {:else if getView() === "favourites"}
+          <Favourites />
+        {:else if getView() === "user"}
+          <UserView />
+        {/if}
       {/if}
     </main>
   </div>
@@ -110,6 +118,16 @@
     overflow-y: auto;
     padding: 28px 32px 40px;
     scroll-padding-top: 24px;
+  }
+
+  /* Agent 常驻挂载点：与 .content 同高，hidden 时不占位 */
+  .agent-mount {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .agent-mount.hidden {
+    display: none;
   }
 
   .splash {

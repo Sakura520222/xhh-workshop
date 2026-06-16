@@ -12,15 +12,26 @@
   import Notifications from "./views/Notifications.svelte";
   import Favourites from "./views/Favourites.svelte";
   import UserView from "./views/UserView.svelte";
-  import TitleBar from "./components/TitleBar.svelte";
-  import Sidebar from "./components/Sidebar.svelte";
-  import { getAuth, getView, refreshAuth, isAuthChecking } from "./lib/stores.svelte";
+ import TitleBar from "./components/TitleBar.svelte";
+ import Sidebar from "./components/Sidebar.svelte";
+  import ToastHost from "./components/ToastHost.svelte";
+ import { getAuth, getView, refreshAuth, isAuthChecking } from "./lib/stores.svelte";
+  import { startPolling, stopPolling } from "./lib/notification.svelte";
 
-  let auth = $derived(getAuth());
-  let checking = $derived(isAuthChecking());
+ let auth = $derived(getAuth());
+ let checking = $derived(isAuthChecking());
 
-  onMount(async () => {
-    await refreshAuth();
+ onMount(async () => {
+   await refreshAuth();
+ });
+
+  // 已登录时启动通知轮询，登出/未登录时停止
+  $effect(() => {
+    if (auth.ok) {
+      startPolling();
+    } else {
+      stopPolling();
+    }
   });
 
   async function handleMinimize() {
@@ -40,6 +51,8 @@
 </script>
 
 <TitleBar onMinimize={handleMinimize} onMaximize={handleMaximize} onClose={handleClose} />
+
+<ToastHost />
 
 {#if checking}
   <div class="splash">

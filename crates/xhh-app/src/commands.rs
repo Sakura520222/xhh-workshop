@@ -2363,6 +2363,17 @@ pub async fn notifications(
         .map_err(|e| e.to_string())
 }
 
+/// 未读通知计数（轻量，仅拉取 limit=1）
+#[tauri::command]
+pub async fn notification_unread_count(
+    state: State<'_, AppState>,
+) -> Result<xhh_core::api::notification::UnreadCount, String> {
+    let c = state.require_client().await?;
+    xhh_core::api::notification::unread_count(&c)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 // ─── Favourites ───────────────────────────────────────────
 
 /// 收藏夹列表

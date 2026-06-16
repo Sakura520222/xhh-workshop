@@ -55,10 +55,11 @@ pub fn api_routes(state: AppState) -> Router {
         .route("/api/search/topic", get(search::topic))
         .route("/api/search/community", get(search::community))
         .route("/api/search/discovery", get(search::discovery))
-        // misc
-        .route("/api/emoji", get(misc::emoji))
-        .route("/api/notifications", get(misc::notifications))
-        // agent
+       // misc
+       .route("/api/emoji", get(misc::emoji))
+       .route("/api/notifications", get(misc::notifications))
+        .route("/api/notifications/unread", get(misc::notification_unread))
+       // agent
         .route("/api/agent/chat", post(agent::chat))
         .route("/api/agent/auto-post", post(agent::auto_post))
         .with_state(state)

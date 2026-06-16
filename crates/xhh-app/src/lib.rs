@@ -91,9 +91,10 @@ pub fn run() {
             commands::search_topic,
             // emoji
             commands::emoji_list,
-            // notifications
-            commands::notifications,
-            // favourites
+           // notifications
+           commands::notifications,
+            commands::notification_unread_count,
+           // favourites
             commands::favour_folders,
             commands::favour_folder,
             // follow / user

@@ -13,7 +13,7 @@
 - **搜索** — 帖子/用户/游戏/话题/社区
 - **COS 上传** — 图片上传到小黑盒图床
 - **LLM Agent** — 多 Provider（OpenAI 兼容 / Claude / Ollama），17 个内置工具，自动发帖
-- **HTTP 服务** — 35 个 REST API 端点 + Swagger UI
+- **HTTP 服务** — 36 个 REST API 端点 + Swagger UI
 - **桌面客户端** — Tauri 2 + Svelte 5，毛玻璃 UI
 
 ## 技术栈

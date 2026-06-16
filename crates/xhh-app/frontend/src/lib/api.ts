@@ -333,6 +333,14 @@ export const emojiList = (): Promise<any> => invoke("emoji_list");
 export const notifications = (offset?: number, limit?: number): Promise<any> =>
   invoke("notifications", { offset: offset ?? 0, limit: limit ?? 20 });
 
+export interface NotificationUnreadCount {
+  comment: number;
+  award: number;
+}
+
+export const notificationUnreadCount = (): Promise<NotificationUnreadCount> =>
+  invoke("notification_unread_count");
+
 // Favourites
 export const favourFolders = (): Promise<any> =>
   invoke("favour_folders");

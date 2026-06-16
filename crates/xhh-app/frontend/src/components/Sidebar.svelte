@@ -1,9 +1,11 @@
 <script lang="ts">
   import { getView, setView, getAuth } from "../lib/stores.svelte";
   import { authLogout } from "../lib/api";
+  import { getUnread } from "../lib/notification.svelte";
 
   let view = $derived(getView());
   let auth = $derived(getAuth());
+  let unread = $derived(getUnread());
   let avatarBroken = $state(false);
   let showAvatar = $derived(!!auth.avatar && !avatarBroken);
   $effect(() => {
@@ -63,11 +65,14 @@
         aria-label={`打开${m.label}`}
         onclick={() => setView(m.key)}
       >
-        <span class="icon-shell">
-          <svg class="mi" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{@html icons[m.icon] ?? ""}</svg>
-        </span>
-        <span class="label">{m.label}</span>
-      </button>
+       <span class="icon-shell">
+         <svg class="mi" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{@html icons[m.icon] ?? ""}</svg>
+       </span>
+       <span class="label">{m.label}</span>
+        {#if m.key === "notifications" && unread > 0}
+          <span class="badge" aria-label={`${unread} 条未读`}>{unread > 99 ? "99+" : unread}</span>
+        {/if}
+     </button>
     {/each}
   </div>
 
@@ -227,12 +232,28 @@
     color: currentColor;
   }
 
-  .menu-item.active .icon-shell {
-    background: color-mix(in srgb, var(--accent) 22%, transparent);
-    color: #bfdbfe;
+ .menu-item.active .icon-shell {
+   background: color-mix(in srgb, var(--accent) 22%, transparent);
+   color: #bfdbfe;
+ }
+
+  .badge {
+    margin-left: auto;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--accent-warm), #ef4444);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+    flex-shrink: 0;
   }
 
-  .mi {
+ .mi {
     flex-shrink: 0;
   }
 

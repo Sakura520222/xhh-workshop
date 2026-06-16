@@ -31,13 +31,9 @@
   let aiStreamId = $state(0);
   let aiCacheEntries: AiCacheItem[] = $state([]);
 
-  function closeAiPanel() {
-    aiStreamId++;
-    aiPanel = false;
-    aiResult = "";
-    aiError = "";
-    aiLoading = false;
-  }
+ function closeAiPanel() {
+   aiPanel = false;
+ }
 
   async function loadAiCache() {
     if (!linkId) { aiCacheEntries = []; return; }
@@ -443,41 +439,47 @@
     </button>
   </div>
 
-  {#if aiPanel}
-    <div class="ai-panel">
-      <div class="ai-header">
-        <span class="ai-title">AI 助手</span>
-        <button class="ai-close" onclick={closeAiPanel}>关闭</button>
-      </div>
-      {#if !aiLoading && !aiResult && !aiError}
-        {#if aiCacheEntries.length > 0}
-          <div class="ai-history">
-            {#each aiCacheEntries as entry}
-              <button class="ai-history-item" onclick={() => { aiResult = entry.content; }}>
-                <span class="ai-history-kind">总结</span>
-                <span class="ai-history-time">{fmtTime(entry.updated_at)}</span>
-              </button>
-            {/each}
-          </div>
-        {/if}
-        <button class="ai-action-main" onclick={summarize} disabled={!post}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2" width="12" height="12" rx="2"/><line x1="5" y1="5" x2="11" y2="5"/><line x1="5" y1="8" x2="11" y2="8"/><line x1="5" y1="11" x2="8" y2="11"/></svg>
-          总结
-        </button>
-      {:else if aiError && !aiResult}
-        <div class="ai-error">{aiError}</div>
-        <div class="ai-error-actions">
-          <button class="ai-retry" onclick={() => { aiError = ""; }}>重试</button>
-          <button class="ai-retry" onclick={closeAiPanel}>关闭</button>
-        </div>
-      {:else}
-        <div class="ai-result selectable">{@html renderAiMarkdown(aiResult)}{#if aiLoading}<span class="ai-cursor"></span>{/if}</div>
-        {#if !aiLoading}
-          <button class="ai-back-btn" onclick={() => { aiResult = ""; }}>重新选择</button>
-        {/if}
-      {/if}
-    </div>
-  {/if}
+ {#if aiPanel}
+   <!-- svelte-ignore a11y_click_events_have_key_events -->
+   <!-- svelte-ignore a11y_no_static_element_interactions -->
+   <div class="ai-overlay" onclick={closeAiPanel}>
+     <div class="ai-panel" onclick={(e) => e.stopPropagation()}>
+       <div class="ai-header">
+         <span class="ai-title">AI 助手</span>
+         <button class="ai-close" onclick={closeAiPanel}>关闭</button>
+       </div>
+       <div class="ai-body">
+         {#if !aiLoading && !aiResult && !aiError}
+           {#if aiCacheEntries.length > 0}
+             <div class="ai-history">
+               {#each aiCacheEntries as entry}
+                 <button class="ai-history-item" onclick={() => { aiResult = entry.content; }}>
+                   <span class="ai-history-kind">总结</span>
+                   <span class="ai-history-time">{fmtTime(entry.updated_at)}</span>
+                 </button>
+               {/each}
+             </div>
+           {/if}
+           <button class="ai-action-main" onclick={summarize} disabled={!post}>
+             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2" width="12" height="12" rx="2"/><line x1="5" y1="5" x2="11" y2="5"/><line x1="5" y1="8" x2="11" y2="8"/><line x1="5" y1="11" x2="8" y2="11"/></svg>
+             总结
+           </button>
+         {:else if aiError && !aiResult}
+           <div class="ai-error">{aiError}</div>
+           <div class="ai-error-actions">
+             <button class="ai-retry" onclick={() => { aiError = ""; }}>重试</button>
+             <button class="ai-retry" onclick={closeAiPanel}>关闭</button>
+           </div>
+         {:else}
+           <div class="ai-result selectable">{@html renderAiMarkdown(aiResult)}{#if aiLoading}<span class="ai-cursor"></span>{/if}</div>
+           {#if !aiLoading}
+             <button class="ai-back-btn" onclick={() => { aiResult = ""; }}>重新选择</button>
+           {/if}
+         {/if}
+       </div>
+     </div>
+   </div>
+ {/if}
 
   {#if loading}
     <div class="status">加载中...</div>
@@ -1055,13 +1057,13 @@
   .expand-btn:hover {
     text-decoration: underline;
   }
-  .comment-bar {
-    position: fixed;
-    bottom: 12px;
-    left: 200px;
-    right: 0;
-    max-width: 720px;
-    margin: 0 auto;
+ .comment-bar {
+   position: fixed;
+   bottom: 12px;
+   left: var(--sidebar-width);
+   right: 0;
+   max-width: 720px;
+   margin: 0 auto;
     padding: 14px 16px;
     border-radius: 100px;
     background: linear-gradient(
@@ -1253,6 +1255,19 @@
   .ai-btn:disabled {
     opacity: 0.4;
   }
+ .ai-overlay {
+   position: fixed;
+   top: 0;
+   bottom: 0;
+   left: var(--sidebar-width);
+   right: 0;
+   background: rgba(0, 0, 0, 0.5);
+   z-index: 9998;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   padding: 20px;
+ }
   .ai-panel {
     background: var(--glass-bg);
     backdrop-filter: var(--glass-blur);
@@ -1261,14 +1276,21 @@
     border: 0.5px solid var(--glass-border);
     box-shadow: var(--elevation-1);
     padding: 16px 18px;
-    margin-bottom: 16px;
-    margin-left: -10px;
-    margin-right: -10px;
+    width: 100%;
+    max-width: 640px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
     animation: aiSlideIn 0.2s ease-out;
   }
+  .ai-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
   @keyframes aiSlideIn {
-    from { opacity: 0; transform: translateY(-8px); }
-    to { opacity: 1; transform: translateY(0); }
+    from { opacity: 0; transform: scale(0.96) translateY(8px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
   }
   .ai-header {
     display: flex;
@@ -1354,14 +1376,12 @@
   .ai-action-main:hover:not(:disabled) svg {
     opacity: 1;
   }
-  .ai-result {
-    font-size: 14px;
-    line-height: 1.8;
-    max-height: 400px;
-    overflow-y: auto;
-    padding: 4px 0;
-    animation: aiFadeIn 0.3s ease-out;
-  }
+ .ai-result {
+   font-size: 14px;
+   line-height: 1.8;
+   padding: 4px 0;
+   animation: aiFadeIn 0.3s ease-out;
+ }
   .ai-result :global(p) {
     margin: 0 0 8px;
   }

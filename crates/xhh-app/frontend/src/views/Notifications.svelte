@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { notifications } from "../lib/api";
-  import { setView, setSelectedLinkId, setSelectedUserId } from "../lib/stores.svelte";
-  import { renderTextSync, getEmojiVersion } from "../lib/render.svelte";
+ import { setView, setSelectedLinkId, setSelectedUserId } from "../lib/stores.svelte";
+ import { renderTextSync, getEmojiVersion } from "../lib/render.svelte";
+  import { refreshUnread, markSeen } from "../lib/notification.svelte";
 
   let messages = $state<any[]>([]);
   let loading = $state(true);
@@ -53,13 +54,26 @@
         messages = [...messages, ...items];
       }
       offset += items.length;
-      if (items.length < 20) hasMore = false;
+     if (items.length < 20) hasMore = false;
     } catch (e) {
       error = String(e);
     } finally {
       loading = false;
       loadingMore = false;
     }
+  }
+
+  // 刷新未读计数并标记当前消息为已见（避免重复弹提示）
+ async function syncBadge() {
+   try {
+     await refreshUnread();
+     await markSeen();
+   } catch { /* ignore */ }
+ }
+
+  function handleRefresh() {
+    load(true);
+    syncBadge();
   }
 
   function loadMore() {
@@ -108,16 +122,17 @@
     }
   }
 
-  onMount(() => {
-    load(true);
-    return () => { observer?.disconnect(); observer = null; };
-  });
+ onMount(() => {
+   load(true);
+    syncBadge();
+   return () => { observer?.disconnect(); observer = null; };
+ });
 </script>
 
 <div class="notif-page">
   <div class="topbar">
-    <span class="topbar-title">通知</span>
-    <button class="refresh-btn" onclick={() => load(true)} disabled={loading}>刷新</button>
+   <span class="topbar-title">通知</span>
+    <button class="refresh-btn" onclick={handleRefresh} disabled={loading}>刷新</button>
   </div>
 
   {#if loading}

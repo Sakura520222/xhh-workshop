@@ -40,3 +40,21 @@ pub async fn notifications(
     let v = list_all_messages(&c, q.offset, q.limit).await?;
     Ok(Json(v))
 }
+
+/// GET /api/notifications/unread — 未读通知计数
+pub async fn notification_unread(State(state): State<AppState>) -> ApiResult<Json<UnreadCountResp>> {
+    let c = state.require_client().await?;
+    let n = xhh_core::api::notification::unread_count(&c).await?;
+    Ok(Json(UnreadCountResp {
+        comment: n.comment,
+        award: n.award,
+        total: n.total(),
+    }))
+}
+
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
+pub struct UnreadCountResp {
+    pub comment: u32,
+    pub award: u32,
+    pub total: u32,
+}

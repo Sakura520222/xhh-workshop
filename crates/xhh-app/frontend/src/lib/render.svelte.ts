@@ -352,3 +352,19 @@ export function renderTextSync(text: string): string {
   const withEmoji = renderEmoji(text);
   return renderMarkdown(withEmoji);
 }
+
+// 仅渲染 emoji（先转义文本，再替换已知 emoji），不带 markdown，
+// 适合单行场景（标题、toast）——既安全又能显示小黑盒表情
+export function renderEmojiText(text: string): string {
+  if (!text) return "";
+  const emojis: string[] = [];
+  text = text.replace(/\[([a-zA-Z]+_[^\]]+)\]/g, (full, code: string) => {
+    const html = emojiHtml(code);
+    if (!html) return full;
+    const idx = emojis.length;
+    emojis.push(html);
+    return `\x00EM${idx}\x00`;
+  });
+  text = escapeHtml(text);
+  return text.replace(/\x00EM(\d+)\x00/g, (_, idx) => emojis[Number(idx)]);
+}

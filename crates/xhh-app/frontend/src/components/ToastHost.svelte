@@ -11,7 +11,7 @@
       <div class="toast-body">
         <div class="toast-title">{t.title}</div>
         {#if t.desc}
-          <div class="toast-desc">{t.desc}</div>
+          <div class="toast-desc">{@html t.desc}</div>
         {/if}
       </div>
       <div class="toast-actions">
@@ -67,6 +67,12 @@
     -webkit-line-clamp: 3;
     line-clamp: 3;
     -webkit-box-orient: vertical;
+  }
+  .toast-desc :global(.emoji) {
+    width: 1em;
+    height: 1em;
+    vertical-align: middle;
+    display: inline-block;
   }
   .toast-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .toast-link {

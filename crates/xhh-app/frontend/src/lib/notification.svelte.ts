@@ -2,6 +2,7 @@
 import { notifications, notificationUnreadCount, type NotificationUnreadCount } from "./api";
 import { getView } from "./stores.svelte";
 import { toastInfo } from "./toast.svelte";
+import { renderEmojiText } from "./render.svelte";
 
 const POLL_INTERVAL = 60_000; // 60s
 const TOAST_FETCH_LIMIT = 5; // 每次拉取最新条数用于检测新消息
@@ -70,8 +71,8 @@ async function checkNewMessages() {
     const first = fresh[0];
     const name = first?.user_a?.username ?? "有人";
     if (fresh.length === 1) {
-      const text = first?.comment_a_text ?? first?.link_title ?? "";
-      toastInfo(`${name} ${msgLabel(first.message_type)}`, text);
+      const raw = first?.comment_a_text ?? first?.link_title ?? "";
+      toastInfo(`${name} ${msgLabel(first.message_type)}`, renderEmojiText(raw));
     } else {
       toastInfo(`你有 ${fresh.length} 条新通知`, "点击查看");
     }

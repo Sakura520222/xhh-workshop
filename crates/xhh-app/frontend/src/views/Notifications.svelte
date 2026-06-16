@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { notifications } from "../lib/api";
  import { setView, setSelectedLinkId, setSelectedUserId } from "../lib/stores.svelte";
- import { renderTextSync, getEmojiVersion } from "../lib/render.svelte";
+ import { renderTextSync, getEmojiVersion, renderEmojiText } from "../lib/render.svelte";
   import { refreshUnread, markSeen } from "../lib/notification.svelte";
 
   let messages = $state<any[]>([]);
@@ -14,6 +14,10 @@
   function rt(text: string): string {
     void emojiVer;
     return renderTextSync(text);
+  }
+  function rtTitle(text: string): string {
+    void emojiVer;
+    return renderEmojiText(text);
   }
   let hasMore = $state(true);
   let loadingMore = $state(false);
@@ -162,7 +166,7 @@
             <span class="time">{fmtTime(msg.timestamp)}</span>
           </div>
           {#if msg.link_title}
-            <div class="msg-target">{msg.link_title}</div>
+            <div class="msg-target">{@html rtTitle(msg.link_title)}</div>
           {/if}
           {#if msg.comment_a_text}
             <div class="msg-text">{@html rt(msg.comment_a_text)}</div>
@@ -313,6 +317,12 @@
     height: 1px;
   }
   .msg-text :global(.emoji) {
+    width: 1em;
+    height: 1em;
+    vertical-align: middle;
+    display: inline-block;
+  }
+  .msg-target :global(.emoji) {
     width: 1em;
     height: 1em;
     vertical-align: middle;

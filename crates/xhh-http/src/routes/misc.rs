@@ -42,7 +42,9 @@ pub async fn notifications(
 }
 
 /// GET /api/notifications/unread — 未读通知计数
-pub async fn notification_unread(State(state): State<AppState>) -> ApiResult<Json<UnreadCountResp>> {
+pub async fn notification_unread(
+    State(state): State<AppState>,
+) -> ApiResult<Json<UnreadCountResp>> {
     let c = state.require_client().await?;
     let n = xhh_core::api::notification::unread_count(&c).await?;
     Ok(Json(UnreadCountResp {

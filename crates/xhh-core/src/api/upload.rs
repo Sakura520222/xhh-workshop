@@ -256,8 +256,12 @@ pub async fn upload_image_bytes(
         .clone();
 
     // Step 2
-    let creds_resp =
-        get_upload_token(client, std::slice::from_ref(&returned_key), &[mimetype.into()]).await?;
+    let creds_resp = get_upload_token(
+        client,
+        std::slice::from_ref(&returned_key),
+        &[mimetype.into()],
+    )
+    .await?;
     let creds = &creds_resp.credentials;
 
     // Step 3

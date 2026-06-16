@@ -84,6 +84,11 @@ pub fn run() {
             commands::ai_analyze_stream,
             commands::ai_cache_get,
             commands::ai_cache_save,
+            // content cache
+            commands::cache_get_config,
+            commands::cache_save_config,
+            commands::cache_stats,
+            commands::cache_clear,
             // image
             commands::save_image,
             commands::upload_image,
@@ -91,10 +96,10 @@ pub fn run() {
             commands::search_topic,
             // emoji
             commands::emoji_list,
-           // notifications
-           commands::notifications,
+            // notifications
+            commands::notifications,
             commands::notification_unread_count,
-           // favourites
+            // favourites
             commands::favour_folders,
             commands::favour_folder,
             // follow / user

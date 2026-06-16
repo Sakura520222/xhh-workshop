@@ -84,8 +84,7 @@ impl LlmProvider for OllamaProvider {
                             .images
                             .iter()
                             .filter_map(|img| {
-                                img.find(";base64,")
-                                    .map(|pos| img[pos + 8..].to_string())
+                                img.find(";base64,").map(|pos| img[pos + 8..].to_string())
                             })
                             .collect();
                         if !imgs.is_empty() {

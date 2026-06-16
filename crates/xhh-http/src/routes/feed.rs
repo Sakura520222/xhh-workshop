@@ -51,25 +51,35 @@ pub struct PostDetailParams {
 }
 
 /// GET /api/post/detail/:link_id?page=1&index=1&limit=20&is_first=1
+///
+/// 仅首屏请求（`is_first=1`）走本地缓存；其余透传 API。
 pub async fn post_detail(
     State(state): State<AppState>,
     axum::extract::Path(link_id): axum::extract::Path<String>,
     Query(q): Query<PostDetailParams>,
 ) -> ApiResult<Json<Value>> {
-    let c = state.require_client().await?;
-    let v = api_post_detail(
-        &c,
-        &link_id,
-        PostDetailQuery {
-            page: q.page,
-            index: q.index,
-            limit: q.limit,
-            is_first: q.is_first,
-            owner_only: q.owner_only,
-        },
-    )
-    .await?;
-    Ok(Json(v))
+    let query = PostDetailQuery {
+        page: q.page,
+        index: q.index,
+        limit: q.limit,
+        is_first: q.is_first,
+        owner_only: q.owner_only,
+    };
+    if q.is_first == Some(1) {
+        // 先查缓存：命中则无需登录 / 联网，支持离线查看
+        let cm = xhh_core::cache::CacheManager::from_default_config();
+        if let Some(v) = cm.get_post(&link_id).ok().flatten() {
+            return Ok(Json(v));
+        }
+        let c = state.require_client().await?;
+        let v = api_post_detail(&c, &link_id, query).await?;
+        let _ = cm.put_post(&link_id, v.clone());
+        Ok(Json(v))
+    } else {
+        let c = state.require_client().await?;
+        let v = api_post_detail(&c, &link_id, query).await?;
+        Ok(Json(v))
+    }
 }
 
 #[derive(Debug, Deserialize)]

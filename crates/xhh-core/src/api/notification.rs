@@ -72,12 +72,12 @@ pub fn parse_unread_count(v: &Value) -> UnreadCount {
             .and_then(Value::as_u64)
             .map(|n| n as u32)
             .unwrap_or(0),
-       award: num
-           .get("award")
-           .and_then(Value::as_u64)
-           .map(|n| n as u32)
-           .unwrap_or(0),
-   }
+        award: num
+            .get("award")
+            .and_then(Value::as_u64)
+            .map(|n| n as u32)
+            .unwrap_or(0),
+    }
 }
 
 #[cfg(test)]

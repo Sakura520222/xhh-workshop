@@ -1,7 +1,16 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { agentGetConfig, agentSaveConfig, windowEffectGet, windowEffectSet } from "../lib/api";
-  import type { WindowEffect } from "../lib/api";
+  import {
+    agentGetConfig,
+    agentSaveConfig,
+    windowEffectGet,
+    windowEffectSet,
+    cacheGetConfig,
+    cacheSaveConfig,
+    cacheStats as loadCacheStats,
+    cacheClear,
+  } from "../lib/api";
+  import type { WindowEffect, CacheStats } from "../lib/api";
   import { getTheme, setTheme, THEMES, setWindowEffectAttr } from "../lib/stores.svelte";
 
   type ProviderKey = "openai" | "anthropic" | "ollama";
@@ -32,6 +41,14 @@
   // 窗口效果
   let windowEffect = $state<WindowEffect>("mica");
   let windowEffectSaving = $state(false);
+
+  // 内容缓存
+  let cacheEnabled = $state(true);
+  let cacheMaxMb = $state(200);
+  let cacheStats = $state<CacheStats | null>(null);
+  let cacheSaving = $state(false);
+  let cacheClearing = $state(false);
+  let cacheSaved = $state(false);
 
   let currentTheme = $derived(getTheme());
 
@@ -72,10 +89,61 @@
       }
       maxLoops = cfg.max_loops ?? 8;
       temperature = cfg.temperature != null ? String(cfg.temperature) : "";
+      try {
+        const cc = await cacheGetConfig();
+        cacheEnabled = cc.enabled;
+        cacheMaxMb = cc.max_bytes ? Math.max(1, Math.round(cc.max_bytes / 1048576)) : 200;
+      } catch {
+        // 缓存配置可选，读取失败不阻塞页面
+      }
     } catch (e) {
       error = String(e);
     } finally {
       loading = false;
+    }
+    await refreshCacheStats();
+  }
+
+  function fmtBytes(n: number): string {
+    if (n < 1024) return `${n} B`;
+    if (n < 1048576) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / 1048576).toFixed(1)} MB`;
+  }
+
+  async function refreshCacheStats() {
+    try {
+      cacheStats = await loadCacheStats();
+    } catch {
+      cacheStats = null;
+    }
+  }
+
+  async function saveCache() {
+    cacheSaving = true;
+    cacheSaved = false;
+    error = "";
+    try {
+      await cacheSaveConfig(cacheEnabled, Math.round(cacheMaxMb * 1048576));
+      cacheSaved = true;
+      setTimeout(() => { cacheSaved = false; }, 2000);
+      await refreshCacheStats();
+    } catch (e) {
+      error = String(e);
+    } finally {
+      cacheSaving = false;
+    }
+  }
+
+  async function clearCache() {
+    cacheClearing = true;
+    error = "";
+    try {
+      await cacheClear();
+      await refreshCacheStats();
+    } catch (e) {
+      error = String(e);
+    } finally {
+      cacheClearing = false;
     }
   }
 
@@ -188,6 +256,45 @@
   {#if loading}
     <div class="status">加载中...</div>
   {:else}
+    <section class="section">
+      <h3 class="section-title">内容缓存</h3>
+      <p class="cache-desc">
+        缓存帖子正文与图片到本地，加速详情浏览与 AI 图片分析，并支持离线查看正文。仅首屏请求会被缓存。
+      </p>
+      <label class="toggle-row" for="cache-enabled">
+        <input id="cache-enabled" type="checkbox" bind:checked={cacheEnabled} />
+        <span>启用内容缓存</span>
+      </label>
+      <div class="field-group">
+        <label class="label" for="cache-max-mb">磁盘配额（MB）</label>
+        <input
+          id="cache-max-mb"
+          type="number"
+          bind:value={cacheMaxMb}
+          class="input"
+          min="50"
+          max="4096"
+        />
+      </div>
+      <div class="cache-stats" aria-live="polite">
+        {#if cacheStats}
+          <span>已用 {fmtBytes(cacheStats.used_bytes)} / {cacheMaxMb} MB</span>
+          <span class="cache-break">帖子 {cacheStats.posts.count} 条 · 图片 {cacheStats.images.count} 张</span>
+        {:else}
+          <span>统计加载中...</span>
+        {/if}
+      </div>
+      <div class="cache-actions">
+        <button type="button" class="cache-save-btn" onclick={saveCache} disabled={cacheSaving}>
+          {cacheSaving ? "保存中..." : "保存缓存设置"}
+        </button>
+        <button type="button" class="cache-clear-btn" onclick={clearCache} disabled={cacheClearing}>
+          {cacheClearing ? "清理中..." : "清空缓存"}
+        </button>
+        {#if cacheSaved}<span class="saved-hint">已保存</span>{/if}
+      </div>
+    </section>
+
     <form onsubmit={(e) => { e.preventDefault(); save(); }} class="form">
       {#if error}
         <div class="error-msg">{error}</div>
@@ -529,5 +636,79 @@
     text-align: center;
     padding: 40px 0;
     color: var(--text-secondary);
+  }
+  .cache-desc {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .toggle-row input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  .cache-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 0.5px solid var(--glass-border);
+  }
+  .cache-break {
+    color: var(--text-secondary);
+    opacity: 0.85;
+  }
+  .cache-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .cache-save-btn {
+    padding: 8px 18px;
+    border-radius: 10px;
+    background: var(--accent);
+    color: white;
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 30%, transparent);
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .cache-save-btn:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+  .cache-save-btn:disabled {
+    opacity: 0.5;
+  }
+  .cache-clear-btn {
+    padding: 8px 18px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+    font-size: 13px;
+    border: 0.5px solid var(--glass-border);
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .cache-clear-btn:hover:not(:disabled) {
+    background: rgba(248, 113, 113, 0.15);
+    border-color: rgba(248, 113, 113, 0.4);
+    color: #f87171;
+  }
+  .cache-clear-btn:disabled {
+    opacity: 0.5;
   }
 </style>

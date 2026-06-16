@@ -1187,12 +1187,28 @@ impl Tool for PostDetailTool {
                 msg: "link_id 不能为空".into(),
             });
         }
-        let resp = api_feed::post_detail(client, link_id, Default::default())
-            .await
-            .map_err(|e| Error::ToolCall {
-                tool: self.name().into(),
-                msg: e.to_string(),
-            })?;
+        // 首屏（is_first=1）走本地缓存：命中跳过网络，未命中抓取后写盘
+        let cm = xhh_core::cache::CacheManager::from_default_config();
+        let resp = match cm.get_post(link_id).unwrap_or(None) {
+            Some(cached) => cached,
+            None => {
+                let r = api_feed::post_detail(
+                    client,
+                    link_id,
+                    api_feed::PostDetailQuery {
+                        is_first: Some(1),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .map_err(|e| Error::ToolCall {
+                    tool: self.name().into(),
+                    msg: e.to_string(),
+                })?;
+                let _ = cm.put_post(link_id, r.clone());
+                r
+            }
+        };
         let link = resp.pointer("/result/link").cloned().unwrap_or(Value::Null);
         Ok(json!({
             "link_id":     link.get("linkid"),

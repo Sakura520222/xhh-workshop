@@ -158,6 +158,9 @@ pub async fn feeds_list(
 }
 
 /// 帖子详情（支持楼层分页）
+///
+/// 仅首屏请求（`is_first == 1`）走本地缓存以加速浏览与离线查看；
+/// 翻页（`is_first == 0`）与不带 `is_first` 的刷新请求透传 API 取最新数据。
 #[tauri::command]
 pub async fn post_detail(
     state: State<'_, AppState>,
@@ -168,20 +171,31 @@ pub async fn post_detail(
     is_first: Option<u32>,
     owner_only: Option<u32>,
 ) -> Result<serde_json::Value, String> {
-    let c = state.require_client().await?;
-    api_feed::post_detail(
-        &c,
-        &link_id,
-        api_feed::PostDetailQuery {
-            page,
-            index,
-            limit,
-            is_first,
-            owner_only,
-        },
-    )
-    .await
-    .map_err(|e| e.to_string())
+    let query = api_feed::PostDetailQuery {
+        page,
+        index,
+        limit,
+        is_first,
+        owner_only,
+    };
+    if is_first == Some(1) {
+        // 先查缓存：命中则无需登录 / 联网，支持离线查看
+        let cm = xhh_core::cache::CacheManager::from_default_config();
+        if let Some(v) = cm.get_post(&link_id).unwrap_or(None) {
+            return Ok(v);
+        }
+        let c = state.require_client().await?;
+        let v = api_feed::post_detail(&c, &link_id, query)
+            .await
+            .map_err(|e| e.to_string())?;
+        let _ = cm.put_post(&link_id, v.clone());
+        Ok(v)
+    } else {
+        let c = state.require_client().await?;
+        api_feed::post_detail(&c, &link_id, query)
+            .await
+            .map_err(|e| e.to_string())
+    }
 }
 
 /// 社区帖子列表
@@ -630,6 +644,42 @@ pub async fn ai_cache_save(
     Ok(item)
 }
 
+// ─── Content Cache ───────────────────────────────────────
+
+/// 读取内容缓存配置（开关 + 配额）
+#[tauri::command]
+pub async fn cache_get_config() -> Result<xhh_core::cache::CacheConfig, String> {
+    let cfg = xhh_core::config::Config::load(None).map_err(|e| e.to_string())?;
+    Ok(cfg.cache)
+}
+
+/// 保存内容缓存配置（写回 config.json）
+#[tauri::command]
+pub async fn cache_save_config(
+    enabled: bool,
+    max_bytes: u64,
+) -> Result<xhh_core::cache::CacheConfig, String> {
+    let mut cfg = xhh_core::config::Config::load(None).map_err(|e| e.to_string())?;
+    cfg.cache.enabled = enabled;
+    cfg.cache.max_bytes = max_bytes;
+    cfg.save(None).map_err(|e| e.to_string())?;
+    Ok(cfg.cache)
+}
+
+/// 缓存占用统计
+#[tauri::command]
+pub async fn cache_stats() -> Result<xhh_core::cache::CacheStats, String> {
+    let cm = xhh_core::cache::CacheManager::from_default_config();
+    cm.stats().map_err(|e| e.to_string())
+}
+
+/// 清空全部缓存（post + image）
+#[tauri::command]
+pub async fn cache_clear() -> Result<(), String> {
+    let cm = xhh_core::cache::CacheManager::from_default_config();
+    cm.clear().map_err(|e| e.to_string())
+}
+
 // ─── Agent History ───────────────────────────────────────
 
 /// 前端 UI 消息 DTO
@@ -738,7 +788,8 @@ fn migrate_legacy_history() -> Option<Vec<SessionData>> {
     }
     tracing::info!("检测到旧版 Agent 历史，开始迁移到多会话目录");
     let ui_msgs: Vec<AgentUiMsg> = load_json_file(&ui_path).unwrap_or_default();
-    let llm_msgs: Vec<xhh_agent::provider::ChatMessage> = load_json_file(&llm_path).unwrap_or_default();
+    let llm_msgs: Vec<xhh_agent::provider::ChatMessage> =
+        load_json_file(&llm_path).unwrap_or_default();
     let id = new_session_id();
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -753,7 +804,9 @@ fn migrate_legacy_history() -> Option<Vec<SessionData>> {
         id: id.clone(),
         title,
         messages: if llm_msgs.is_empty() {
-            vec![xhh_agent::provider::ChatMessage::system(xhh_agent::prompt::SYSTEM_PROMPT)]
+            vec![xhh_agent::provider::ChatMessage::system(
+                xhh_agent::prompt::SYSTEM_PROMPT,
+            )]
         } else {
             llm_msgs
         },
@@ -848,9 +901,7 @@ async fn ensure_agent_runtime(state: &AppState) -> Result<(), String> {
 
 /// 列出所有会话（按 updated_at 倒序）
 #[tauri::command]
-pub async fn agent_session_list(
-    state: State<'_, AppState>,
-) -> Result<Vec<SessionMeta>, String> {
+pub async fn agent_session_list(state: State<'_, AppState>) -> Result<Vec<SessionMeta>, String> {
     ensure_agent_runtime(&state).await?;
     let sessions = state.agent_sessions.lock().await;
     Ok(sessions.list_meta())
@@ -889,7 +940,10 @@ pub async fn agent_session_switch(
     ensure_agent_runtime(&state).await?;
     let mut sessions = state.agent_sessions.lock().await;
     sessions.switch(&id)?;
-    Ok(sessions.active().map(|s| s.ui_messages.clone()).unwrap_or_default())
+    Ok(sessions
+        .active()
+        .map(|s| s.ui_messages.clone())
+        .unwrap_or_default())
 }
 
 /// 重命名会话
@@ -915,9 +969,14 @@ pub async fn agent_session_rename(
 
 /// 删除会话（删当前活跃会话时自动切到下一个；全删完则补一个新空会话）
 #[tauri::command]
-pub async fn agent_session_delete(state: State<'_, AppState>, id: String) -> Result<String, String> {
+pub async fn agent_session_delete(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<String, String> {
     let mut sessions = state.agent_sessions.lock().await;
-    let removed = sessions.remove(&id).ok_or_else(|| format!("会话不存在: {}", id))?;
+    let removed = sessions
+        .remove(&id)
+        .ok_or_else(|| format!("会话不存在: {}", id))?;
     delete_session_file(&removed.id);
     if sessions.sessions.is_empty() {
         let s = SessionData::new(new_session_id());
@@ -939,7 +998,10 @@ pub async fn agent_session_delete(state: State<'_, AppState>, id: String) -> Res
 pub async fn agent_history_get(state: State<'_, AppState>) -> Result<Vec<AgentUiMsg>, String> {
     ensure_agent_runtime(&state).await?;
     let sessions = state.agent_sessions.lock().await;
-    Ok(sessions.active().map(|s| s.ui_messages.clone()).unwrap_or_default())
+    Ok(sessions
+        .active()
+        .map(|s| s.ui_messages.clone())
+        .unwrap_or_default())
 }
 
 /// 保存当前活跃会话的 UI 消息；同时根据首条用户消息更新会话标题
@@ -1155,24 +1217,21 @@ pub async fn ai_analyze_stream(
     let ac = xhh_agent::config::AgentConfig::load(None).map_err(|e| e.to_string())?;
     let provider_kind = ac.build_provider_config().map_err(|e| e.to_string())?;
 
-    // 构建消息
+    // 构建消息：所有 provider 统一把图片下载为 data URI（走本地缓存），
+    // OpenAI / Anthropic / Ollama 均接受 data URI，且图片缓存对全部 provider 生效
     let image_list = images.unwrap_or_default();
-    let (final_prompt, final_images) = match (&provider_kind, image_list) {
-        (ProviderKind::Ollama(_), imgs) if !imgs.is_empty() => {
-            let mut data_uris = Vec::new();
-            for url in imgs.iter().take(5) {
-                match download_to_data_uri(url).await {
-                    Ok(du) => data_uris.push(du),
-                    Err(e) => tracing::warn!(url = %url, error = %e, "下载图片失败"),
-                }
-            }
-            if data_uris.is_empty() {
-                (prompt, vec![])
-            } else {
-                (prompt, data_uris)
+    let final_prompt = prompt;
+    let final_images = if image_list.is_empty() {
+        Vec::new()
+    } else {
+        let mut data_uris = Vec::new();
+        for url in image_list.iter().take(5) {
+            match fetch_image_data_uri(url).await {
+                Ok(du) => data_uris.push(du),
+                Err(e) => tracing::warn!(url = %url, error = %e, "下载图片失败"),
             }
         }
-        (_, imgs) => (prompt, imgs),
+        data_uris
     };
 
     let msgs = if final_images.is_empty() {
@@ -1973,9 +2032,7 @@ pub async fn agent_chat_stream(
         Vec<String>,
     ) = {
         let mut sessions = state.agent_sessions.lock().await;
-        let session = sessions
-            .active_mut()
-            .ok_or("Agent 会话未初始化")?;
+        let session = sessions.active_mut().ok_or("Agent 会话未初始化")?;
         let pending = if has_confirmation_decisions {
             session.pending_resume.take()
         } else {
@@ -2090,9 +2147,7 @@ pub async fn agent_chat_stream(
                     // 短锁：写回 messages + pending_resume + touch
                     let snap = {
                         let mut sessions = state.agent_sessions.lock().await;
-                        let session = sessions
-                            .active_mut()
-                            .ok_or("Agent 会话未初始化")?;
+                        let session = sessions.active_mut().ok_or("Agent 会话未初始化")?;
                         session.messages = messages_snapshot.clone();
                         session.pending_resume = Some(crate::state::PendingResume {
                             tool_calls: output.tool_calls.clone(),
@@ -2167,7 +2222,10 @@ pub async fn agent_chat_stream(
 }
 
 /// 把当前 messages 写回活跃 session 并 touch，返回 clone 的 session 快照供锁外持久化
-async fn flush_messages(state: &AppState, messages: &[xhh_agent::provider::ChatMessage]) -> SessionData {
+async fn flush_messages(
+    state: &AppState,
+    messages: &[xhh_agent::provider::ChatMessage],
+) -> SessionData {
     let mut sessions = state.agent_sessions.lock().await;
     match sessions.active_mut() {
         Some(session) => {
@@ -2182,8 +2240,8 @@ async fn flush_messages(state: &AppState, messages: &[xhh_agent::provider::ChatM
     }
 }
 
-/// 下载远程图片并转为 data URI
-async fn download_to_data_uri(url: &str) -> Result<String, String> {
+/// 下载远程图片，返回 (content_type, bytes)
+async fn download_image_bytes(url: &str) -> Result<(String, Vec<u8>), String> {
     let resp = reqwest::get(url)
         .await
         .map_err(|e| format!("下载失败: {}", e))?;
@@ -2193,9 +2251,30 @@ async fn download_to_data_uri(url: &str) -> Result<String, String> {
         .and_then(|v| v.to_str().ok())
         .unwrap_or("image/jpeg")
         .to_string();
-    let bytes = resp.bytes().await.map_err(|e| format!("读取失败: {}", e))?;
-    let b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes);
-    Ok(format!("data:{};base64,{}", content_type, b64))
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| format!("读取失败: {}", e))?
+        .to_vec();
+    Ok((content_type, bytes))
+}
+
+/// 字节 → data URI
+fn make_data_uri(content_type: &str, bytes: &[u8]) -> String {
+    let b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes);
+    format!("data:{content_type};base64,{b64}")
+}
+
+/// 取图片 data URI：命中本地图片缓存直接返回，否则下载后写盘再返回。
+/// 缓存读写均为 best-effort，失败时退化为直接下载。
+async fn fetch_image_data_uri(url: &str) -> Result<String, String> {
+    let cm = xhh_core::cache::CacheManager::from_default_config();
+    if let Some(du) = cm.get_image_data_uri(url).unwrap_or(None) {
+        return Ok(du);
+    }
+    let (content_type, bytes) = download_image_bytes(url).await?;
+    let _ = cm.put_image(url, &content_type, &bytes);
+    Ok(make_data_uri(&content_type, &bytes))
 }
 
 // ─── Image Download ──────────────────────────────────────
@@ -2483,10 +2562,7 @@ pub fn window_effect_get() -> crate::prefs::WindowEffect {
 }
 
 #[tauri::command]
-pub fn window_effect_set(
-    app: AppHandle,
-    effect: crate::prefs::WindowEffect,
-) -> Result<(), String> {
+pub fn window_effect_set(app: AppHandle, effect: crate::prefs::WindowEffect) -> Result<(), String> {
     crate::prefs::save_effect(effect)?;
     if let Some(window) = app.get_webview_window("main") {
         crate::apply_window_effect(&window, effect)?;

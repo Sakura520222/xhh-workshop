@@ -31,6 +31,8 @@ pub struct QrCodeResp {
 }
 
 /// 单次轮询的状态
+// 仅在轮询循环中瞬态返回、从不批量存储，大体积 Success 变体无内存浪费问题
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum QrPollResult {
     /// 等待用户扫码 / 确认登录

@@ -37,6 +37,9 @@ pub struct Config {
     /// 本地生成的 Base64 Token
     #[serde(default)]
     pub x_xhh_tokenid: String,
+    /// 内容缓存配置（帖子 / 图片本地缓存）
+    #[serde(default)]
+    pub cache: crate::cache::CacheConfig,
 }
 
 impl Config {

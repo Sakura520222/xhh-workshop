@@ -364,3 +364,26 @@ export const followerList = (userid: string, offset?: number, limit?: number): P
 // User posts
 export const userEvents = (userid?: string, lastval?: string): Promise<any> =>
   invoke("user_events", { userid, lastval: lastval ?? "" });
+
+// Content cache (post text + image bytes)
+export interface CacheConfig {
+  enabled: boolean;
+  max_bytes: number;
+}
+export interface CacheAreaStats {
+  count: number;
+  bytes: number;
+}
+export interface CacheStats {
+  enabled: boolean;
+  max_bytes: number;
+  used_bytes: number;
+  posts: CacheAreaStats;
+  images: CacheAreaStats;
+}
+
+export const cacheGetConfig = (): Promise<CacheConfig> => invoke("cache_get_config");
+export const cacheSaveConfig = (enabled: boolean, maxBytes: number): Promise<CacheConfig> =>
+  invoke("cache_save_config", { enabled, maxBytes });
+export const cacheStats = (): Promise<CacheStats> => invoke("cache_stats");
+export const cacheClear = (): Promise<void> => invoke("cache_clear");

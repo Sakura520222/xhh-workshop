@@ -35,6 +35,14 @@
    aiPanel = false;
  }
 
+ // 打开 AI 面板：首次进入（无结果/未加载/无报错）立即触发总结
+ function openAiPanel() {
+   aiPanel = true;
+   if (!aiResult && !aiLoading && !aiError) {
+     summarize();
+   }
+ }
+
   async function loadAiCache() {
     if (!linkId) { aiCacheEntries = []; return; }
     try {
@@ -431,7 +439,7 @@
   <div class="topbar">
     <button class="back-btn" onclick={back}>返回</button>
     <span class="topbar-title">帖子详情</span>
-    <button class="ai-btn" aria-label="AI 助手" onclick={() => aiPanel = !aiPanel} class:active={aiPanel} disabled={!post}>
+    <button class="ai-btn" aria-label="AI 助手" onclick={openAiPanel} class:active={aiPanel} disabled={!post}>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M8 1l1.5 3.5L13 6l-3.5 1.5L8 11l-1.5-3.5L3 6l3.5-1.5z"/>
         <path d="M12.5 9.5l.75 1.75L15 12l-1.75.75L12.5 14.5l-.75-1.75L10 12l1.75-.75z"/>
@@ -497,7 +505,7 @@
         {#if post.create_at}<span class="time">{fmtTime(post.create_at)}</span>{/if}
       </div>
 
-      <h1 class="post-title selectable">{post.title ?? "(无标题)"}</h1>
+      <h1 class="post-title selectable">{@html rt(post.title ?? "(无标题)")}</h1>
 
       {#if topImageUrls.length > 0}
         <div class="img-gallery top-gallery">
@@ -803,6 +811,13 @@
     font-weight: 600;
     line-height: 1.4;
     margin-bottom: 12px;
+  }
+  .post-title :global(.emoji) {
+    width: 1em;
+    height: 1em;
+    vertical-align: middle;
+    display: inline-block;
+    margin: 0 1px;
   }
   .post-content {
     font-size: 14px;

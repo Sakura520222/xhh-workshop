@@ -3,7 +3,7 @@
 //! 设计：
 //! - [`Tool`] trait — 统一接口
 //! - [`ToolRegistry`] — 集中注册 + 按 name 查找
-//! - 20 个内置工具，覆盖帖子/评论/点赞/收藏/搜索/社区/用户/上传全部功能
+//! - 21 个内置工具，覆盖帖子/评论/点赞/收藏/搜索/社区/用户/上传全部功能
 //!
 //! 每个 Tool 接收 JSON 字符串参数，返回 JSON 字符串结果。
 
@@ -93,7 +93,7 @@ impl ToolRegistry {
         }
     }
 
-    /// 注册全部内置工具（20 个）
+    /// 注册全部内置工具（21 个）
     pub fn with_defaults() -> Self {
         let mut reg = Self::new();
         // 查询类
@@ -119,6 +119,7 @@ impl ToolRegistry {
         reg.register(Box::new(ListFavouriteFoldersTool));
         reg.register(Box::new(CreateFavouriteFolderTool));
         reg.register(Box::new(ListFavouriteLinksTool));
+        reg.register(Box::new(MoveFavouriteTool));
         // 上传
         reg.register(Box::new(UploadImageTool));
         reg
@@ -817,7 +818,7 @@ impl Tool for ListFavouriteLinksTool {
     fn spec(&self) -> ToolSpec {
         ToolSpec::new(
             "list_favourite_links",
-            "查看收藏的帖子列表。folder_id 省略=全部收藏；指定 folder_id=某个收藏夹的内容。offset/limit 分页。",
+            "查看收藏的帖子列表（含标题、话题、摘要等，可用于分类整理）。folder_id 省略=全部收藏；指定 folder_id=某个收藏夹的内容。offset/limit 分页。",
             json!({
                 "type": "object",
                 "properties": {
@@ -857,9 +858,20 @@ impl Tool for ListFavouriteLinksTool {
             .iter()
             .map(|item| {
                 let l = item.get("link").cloned().unwrap_or(json!({}));
+                let topics: Vec<String> = l
+                    .get("topics")
+                    .and_then(|t| t.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|t| t.get("name").and_then(|n| n.as_str()).map(String::from))
+                            .collect()
+                    })
+                    .unwrap_or_default();
                 json!({
                     "link_id": l.get("linkid"),
                     "title": l.get("title"),
+                    "description": l.get("description"),
+                    "topics": topics,
                     "comment_num": l.get("comment_num"),
                     "like_num": l.get("link_award_num"),
                     "author": l.pointer("/user/username"),
@@ -867,6 +879,76 @@ impl Tool for ListFavouriteLinksTool {
             })
             .collect();
         Ok(json!({"count": list.len(), "posts": list, "offset": offset, "has_next": has_next}).to_string())
+    }
+}
+
+/// 移动收藏（默认夹 → 指定夹）
+pub struct MoveFavouriteTool;
+
+#[async_trait]
+impl Tool for MoveFavouriteTool {
+    fn name(&self) -> &'static str {
+        "move_favourite"
+    }
+
+    fn spec(&self) -> ToolSpec {
+        ToolSpec::new(
+            "move_favourite",
+            "把帖子从默认收藏夹移动到指定收藏夹。平台无直接移动接口，内部先从默认夹取消再收藏到目标夹。分类整理收藏时用这个，不要分两步调 favourite。",
+            json!({
+                "type": "object",
+                "properties": {
+                    "link_id": {"type": "string", "description": "帖子 ID"},
+                    "folder_id": {"type": "string", "description": "目标收藏夹 ID"}
+                },
+                "required": ["link_id", "folder_id"]
+            }),
+        )
+    }
+
+    fn requires_confirmation(&self) -> bool {
+        true
+    }
+
+    fn confirmation(&self, arguments_json: &str) -> ToolConfirmation {
+        let v = parsed_args(arguments_json);
+        let link_id = arg_str(&v, "link_id");
+        let folder_id = arg_str(&v, "folder_id");
+        let id_disp = if link_id.is_empty() { "未提供 ID" } else { link_id };
+        ToolConfirmation {
+            tool_name: self.name(),
+            risk_level: RiskLevel::Medium,
+            summary: format!("移动帖子 {} 到收藏夹 {}", id_disp, folder_id),
+            arguments_json: arguments_json.to_string(),
+        }
+    }
+
+    async fn execute(&self, client: &XhhClient, args_json: &str) -> Result<String> {
+        let v: Value = serde_json::from_str(args_json).map_err(|e| Error::ToolCall {
+            tool: self.name().into(),
+            msg: format!("参数解析失败: {}", e),
+        })?;
+        let link_id = v.get("link_id").and_then(|s| s.as_str()).unwrap_or("");
+        let folder_id = v.get("folder_id").and_then(|s| s.as_str()).unwrap_or("");
+        if link_id.is_empty() || folder_id.is_empty() {
+            return Err(Error::ToolCall {
+                tool: self.name().into(),
+                msg: "link_id 和 folder_id 不能为空".into(),
+            });
+        }
+        api_inter::unfavourite(client, link_id, None)
+            .await
+            .map_err(|e| Error::ToolCall {
+                tool: self.name().into(),
+                msg: format!("取消默认夹失败: {}", e),
+            })?;
+        api_inter::favourite(client, link_id, Some(folder_id))
+            .await
+            .map_err(|e| Error::ToolCall {
+                tool: self.name().into(),
+                msg: format!("收藏到目标夹失败: {}", e),
+            })?;
+        Ok(json!({"ok": true, "message": "移动成功"}).to_string())
     }
 }
 
@@ -1645,15 +1727,16 @@ mod tests {
         assert!(names.contains(&"list_favourite_folders"));
         assert!(names.contains(&"create_favourite_folder"));
         assert!(names.contains(&"list_favourite_links"));
+        assert!(names.contains(&"move_favourite"));
         // 上传
         assert!(names.contains(&"upload_image"));
-        assert_eq!(reg.names().len(), 20);
+        assert_eq!(reg.names().len(), 21);
     }
 
     #[test]
     fn specs_are_valid_json_schema() {
         let reg = ToolRegistry::with_defaults();
-        assert_eq!(reg.specs().len(), 20);
+        assert_eq!(reg.specs().len(), 21);
         for s in reg.specs() {
             assert!(!s.name.is_empty());
             assert!(s.parameters.is_object());

@@ -880,7 +880,7 @@
   .back-btn {
     padding: 6px 14px;
     border-radius: 14px;
-    background: rgba(255, 255, 255, 0.12);
+    background: var(--hairline);
     border: 0.5px solid rgba(255, 255, 255, 0.2);
     color: var(--text);
     font-size: 13px;
@@ -1066,8 +1066,8 @@
   .action-btn {
     padding: 6px 16px;
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.06);
-    border: 0.5px solid rgba(255, 255, 255, 0.08);
+    background: var(--fill-hover);
+    border: 0.5px solid var(--fill-strong);
     font-size: 13px;
     transition: all var(--duration-fast) var(--ease-out);
   }
@@ -1211,14 +1211,14 @@
     background: linear-gradient(
       180deg,
       rgba(255, 255, 255, 0.18) 0%,
-      rgba(255, 255, 255, 0.08) 100%
+      var(--fill-strong) 100%
     );
     backdrop-filter: blur(40px) saturate(1.8) brightness(1.05);
     -webkit-backdrop-filter: blur(40px) saturate(1.8) brightness(1.05);
     border: 0.5px solid rgba(255, 255, 255, 0.2);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.5),
-      inset 0 -0.5px 0 rgba(255, 255, 255, 0.1),
+      inset 0 -0.5px 0 var(--hairline-soft),
       0 8px 40px rgba(0, 0, 0, 0.12),
       0 2px 12px rgba(0, 0, 0, 0.06);
     z-index: 100;
@@ -1239,7 +1239,7 @@
     flex: 1;
     padding: 10px 14px;
     border-radius: 14px;
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--fill-strong);
     color: var(--text);
     border: 0.5px solid rgba(255, 255, 255, 0.15);
     font-size: 14px;
@@ -1252,7 +1252,7 @@
     background: rgba(255, 255, 255, 0.14);
     box-shadow:
       inset 0 0.5px 0 rgba(255, 255, 255, 0.3),
-      0 0 0 3px rgba(255, 255, 255, 0.1);
+      0 0 0 3px var(--hairline-soft);
   }
   .c-input::placeholder {
     color: #222;
@@ -1284,7 +1284,7 @@
     font-size: 13px;
   }
   .status.error {
-    color: #f87171;
+    color: var(--danger);
   }
   .clickable-img {
     cursor: zoom-in;
@@ -1321,7 +1321,7 @@
   .viewer-btn {
     padding: 8px 20px;
     border-radius: 12px;
-    background: rgba(255, 255, 255, 0.12);
+    background: var(--hairline);
     border: 0.5px solid rgba(255, 255, 255, 0.15);
     color: white;
     font-size: 13px;
@@ -1348,14 +1348,14 @@
   .ai-result :global(.md-code) {
     padding: 2px 6px;
     border-radius: 4px;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--hairline-soft);
     font-size: 13px;
     font-family: monospace;
   }
   .ai-result :global(.md-code-block) {
     padding: 12px 16px;
     border-radius: 8px;
-    background: rgba(0, 0, 0, 0.3);
+    background: var(--code-bg);
     overflow-x: auto;
     margin: 8px 0;
   }
@@ -1375,7 +1375,7 @@
     margin-left: auto;
     padding: 6px 8px;
     border-radius: 12px;
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--fill-strong);
     border: 0.5px solid rgba(255, 255, 255, 0.15);
     color: var(--text-secondary);
     display: flex;
@@ -1403,7 +1403,7 @@
    bottom: 0;
    left: var(--sidebar-width);
    right: 0;
-   background: rgba(0, 0, 0, 0.5);
+   background: var(--scrim);
    z-index: 9998;
    display: flex;
    align-items: center;
@@ -1451,12 +1451,12 @@
     color: var(--text-secondary);
     padding: 4px 10px;
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--fill-hover);
     border: 0.5px solid var(--glass-border);
     transition: all var(--duration-fast) var(--ease-out);
   }
   .ai-close:hover {
-    background: rgba(255, 255, 255, 0.12);
+    background: var(--hairline);
     color: var(--text);
   }
   .ai-history {
@@ -1497,8 +1497,8 @@
     gap: 8px;
     padding: 12px;
     border-radius: 12px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 0.5px solid rgba(255, 255, 255, 0.08);
+    background: var(--fill);
+    border: 0.5px solid var(--fill-strong);
     color: var(--text);
     font-size: 13px;
     transition: all var(--duration-fast) var(--ease-out);
@@ -1542,7 +1542,7 @@
     margin: 14px 0 6px;
     line-height: 1.4;
     padding-bottom: 4px;
-    border-bottom: 0.5px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 0.5px solid var(--hairline-soft);
   }
   .ai-result :global(.ai-md-h3) {
     font-size: 15px;
@@ -1586,7 +1586,7 @@
     margin: 8px 0;
     padding: 12px 14px;
     border-radius: 8px;
-    background: rgba(0, 0, 0, 0.3);
+    background: var(--code-bg);
     overflow-x: auto;
   }
   .ai-result :global(.ai-md-pre code) {
@@ -1598,7 +1598,7 @@
   .ai-result :global(.ai-md-code) {
     padding: 1px 5px;
     border-radius: 4px;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--hairline-soft);
     font-size: 13px;
     font-family: monospace;
   }
@@ -1611,13 +1611,13 @@
   }
   .ai-result :global(.ai-md-hr) {
     border: none;
-    border-top: 0.5px solid rgba(255, 255, 255, 0.12);
+    border-top: 0.5px solid var(--hairline);
     margin: 12px 0;
   }
   .ai-result :global(.ai-md-table-wrap) {
     margin: 10px 0;
     overflow-x: auto;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid var(--hairline);
     border-radius: 8px;
   }
   .ai-result :global(.ai-md-table) {
@@ -1629,8 +1629,8 @@
   .ai-result :global(.ai-md-table th),
   .ai-result :global(.ai-md-table td) {
     padding: 7px 10px;
-    border-right: 1px solid rgba(255, 255, 255, 0.1);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-right: 1px solid var(--hairline-soft);
+    border-bottom: 1px solid var(--hairline-soft);
     vertical-align: top;
   }
   .ai-result :global(.ai-md-table th:last-child),
@@ -1641,12 +1641,12 @@
     border-bottom: none;
   }
   .ai-result :global(.ai-md-table th) {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--fill-strong);
     color: var(--text);
     font-weight: 600;
   }
   .ai-result :global(.ai-md-table tbody tr:nth-child(even)) {
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--fill);
   }
   .ai-result :global(.ai-md-align-left) {
     text-align: left;
@@ -1691,7 +1691,7 @@
     border-radius: 10px;
     background: rgba(248, 113, 113, 0.1);
     border: 0.5px solid rgba(248, 113, 113, 0.2);
-    color: #f87171;
+    color: var(--danger);
     font-size: 13px;
     line-height: 1.5;
   }
@@ -1706,12 +1706,12 @@
     color: var(--text-secondary);
     padding: 5px 14px;
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--fill-hover);
     border: 0.5px solid var(--glass-border);
     transition: all var(--duration-fast) var(--ease-out);
   }
   .ai-retry:hover {
-    background: rgba(255, 255, 255, 0.12);
+    background: var(--hairline);
     color: var(--text);
   }
   .ai-back-btn {
@@ -1720,12 +1720,12 @@
     border-radius: 8px;
     font-size: 12px;
     color: var(--text-secondary);
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--fill);
     border: 0.5px solid var(--glass-border);
     transition: all var(--duration-fast) var(--ease-out);
   }
   .ai-back-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--hairline-soft);
     color: var(--text);
   }
   .action-btn.faved {
@@ -1757,7 +1757,7 @@
     border-radius: 8px;
     background: rgba(248, 113, 113, 0.12);
     border: 0.5px solid rgba(248, 113, 113, 0.3);
-    color: #f87171;
+    color: var(--danger);
     transition: all var(--duration-fast) var(--ease-out);
   }
   .fav-unfav:hover:not(:disabled) {
@@ -1769,7 +1769,7 @@
     justify-content: space-between;
     padding: 11px 14px;
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--fill-hover);
     border: 0.5px solid var(--glass-border);
     font-size: 13px;
     transition: all var(--duration-fast) var(--ease-out);
@@ -1809,7 +1809,7 @@
     flex: 1;
     padding: 8px 12px;
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--fill-hover);
     border: 0.5px solid var(--glass-border);
     color: var(--text);
     font-size: 13px;
@@ -1818,7 +1818,7 @@
   }
   .fav-input:focus {
     border-color: var(--accent);
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--hairline-soft);
   }
   .fav-new-btn {
     padding: 8px 14px;

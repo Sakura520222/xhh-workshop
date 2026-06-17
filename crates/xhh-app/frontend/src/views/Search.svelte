@@ -126,7 +126,7 @@
     flex: 1;
     padding: 10px 14px;
     border-radius: 14px;
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--fill);
     color: var(--text);
     border: 0.5px solid var(--glass-border);
     font-size: 14px;
@@ -140,7 +140,7 @@
   .type-select {
     padding: 10px 12px;
     border-radius: 14px;
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--fill);
     color: var(--text);
     border: 0.5px solid var(--glass-border);
     font-size: 13px;
@@ -233,6 +233,6 @@
     color: var(--text-secondary);
   }
   .status.error {
-    color: #f87171;
+    color: var(--danger);
   }
 </style>

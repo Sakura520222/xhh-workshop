@@ -232,7 +232,7 @@
     color: var(--text-secondary);
   }
   .status.error {
-    color: #f87171;
+    color: var(--danger);
   }
   .load-more {
     display: block;

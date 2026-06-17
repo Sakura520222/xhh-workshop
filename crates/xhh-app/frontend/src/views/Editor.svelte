@@ -512,7 +512,7 @@
     padding: 6px 10px;
     border-radius: 999px;
     background: var(--accent-soft);
-    color: #bfdbfe;
+    color: var(--on-accent-soft);
     border: 1px solid color-mix(in srgb, var(--accent-hover) 18%, transparent);
     font-size: 13px;
     font-weight: 750;
@@ -559,7 +559,7 @@
   }
 
   .publish-card li.done {
-    color: #bbf7d0;
+    color: var(--success-fg);
   }
 
   .submit-btn {
@@ -575,13 +575,13 @@
 
   .msg.error {
     background: var(--danger-soft);
-    color: #fecaca;
+    color: var(--danger-fg);
     border: 1px solid rgba(248, 113, 113, 0.22);
   }
 
   .msg.success {
     background: var(--success-soft);
-    color: #bbf7d0;
+    color: var(--success-fg);
     border: 1px solid rgba(34, 197, 94, 0.22);
   }
 

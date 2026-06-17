@@ -218,7 +218,7 @@
   }
 
   .placeholder.success {
-    color: #bbf7d0;
+    color: var(--success-fg);
     background: var(--success-soft);
     border-color: rgba(34, 197, 94, 0.24);
     font-size: 16px;
@@ -237,7 +237,7 @@
   }
 
   .placeholder.error {
-    color: #fecaca;
+    color: var(--danger-fg);
     background: var(--danger-soft);
     border-color: rgba(248, 113, 113, 0.24);
     padding: 18px;
@@ -322,7 +322,7 @@
     border-radius: 999px;
     border: 1px solid rgba(248, 113, 113, 0.4);
     background: color-mix(in srgb, var(--danger-soft) 60%, transparent);
-    color: #fecaca;
+    color: var(--danger-fg);
     font-size: 13px;
     font-weight: 700;
     transition: transform var(--duration-fast) var(--ease-out), filter var(--duration-fast) var(--ease-out);

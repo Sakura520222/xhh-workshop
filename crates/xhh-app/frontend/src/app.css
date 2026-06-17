@@ -28,6 +28,12 @@
   --danger-soft: rgba(248, 113, 113, 0.14);
   --warning: #f59e0b;
 
+  /* 状态前景色：落在 soft 背景上的状态文字/图标，亮色模式自动加深 */
+  --success-fg: #bbf7d0;
+  --danger-fg: #fecaca;
+  --warning-fg: #fcd34d;
+  --on-accent-soft: #bfdbfe;
+
   --border: rgba(148, 163, 184, 0.18);
   --border-strong: rgba(203, 213, 225, 0.28);
   --glass-bg: rgba(15, 23, 42, 0.68);
@@ -40,6 +46,31 @@
   --bg-grad-1: #070a12;
   --bg-grad-2: #0d1320;
   --bg-grad-3: #111827;
+
+  /* 背景光晕在底色上的混色强度（亮色模式整体调低，避免浅底上泛彩） */
+  --glow-mix-1: 24%;
+  --glow-mix-2: 18%;
+
+  /* 语义化表面：分隔线 / 代码 / 链接 / 网格 / 滚动条 / 下拉选项 —— 亮暗模式各自覆盖 */
+  --hairline: rgba(148, 163, 184, 0.16);
+  --hairline-soft: rgba(148, 163, 184, 0.12);
+  --hairline-faint: rgba(148, 163, 184, 0.04);
+  --code-bg: rgba(2, 6, 23, 0.55);
+  --code-inline-bg: rgba(148, 163, 184, 0.12);
+  --inset-bg: rgba(2, 6, 23, 0.32);
+  --scrim: rgba(2, 6, 23, 0.62);
+  /* 基于 --text 的填充层：暗色下提亮、亮色下加深，无需在亮色模式单独覆盖 */
+  --fill: color-mix(in srgb, var(--text) 4%, transparent);
+  --fill-hover: color-mix(in srgb, var(--text) 6%, transparent);
+  --fill-strong: color-mix(in srgb, var(--text) 8%, transparent);
+  --link-color: #93c5fd;
+  --table-head-bg: rgba(148, 163, 184, 0.1);
+  --table-stripe: rgba(148, 163, 184, 0.04);
+  --grid-line: rgba(148, 163, 184, 0.04);
+  --placeholder: rgba(148, 163, 184, 0.68);
+  --option-bg: #0f172a;
+  --scrollbar-thumb: rgba(148, 163, 184, 0.22);
+  --scrollbar-hover: rgba(203, 213, 225, 0.34);
 
   --radius-xs: 8px;
   --radius-sm: 12px;
@@ -197,6 +228,174 @@
   --bg-grad-3: #241c0e;
 }
 
+/* ========== 亮色模式 ==========
+   data-mode="light" 与 data-theme 正交：midnight 亮色作为完整基础，
+   其余主题仅覆盖色系相关变量（底色基调 / accent / glow / 链接色）。 */
+:root[data-mode="light"] {
+  color-scheme: light;
+
+  --bg: #eef2f8;
+  --bg-soft: #e2e8f1;
+  --bg-card: rgba(255, 255, 255, 0.82);
+  --bg-hover: rgba(241, 245, 249, 0.9);
+  --surface: rgba(255, 255, 255, 0.74);
+  --surface-strong: rgba(255, 255, 255, 0.94);
+  --surface-muted: rgba(15, 23, 42, 0.04);
+
+  --text: #0f172a;
+  --text-strong: #020617;
+  --text-secondary: rgba(51, 65, 85, 0.88);
+  --text-muted: rgba(71, 85, 105, 0.74);
+
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-strong: #1e40af;
+  --accent-soft: rgba(37, 99, 235, 0.12);
+  --accent-warm: #ea580c;
+  --accent-warm-soft: rgba(234, 88, 12, 0.12);
+  --success: #16a34a;
+  --success-soft: rgba(22, 163, 74, 0.12);
+  --danger: #dc2626;
+  --danger-soft: rgba(220, 38, 38, 0.1);
+  --warning: #d97706;
+
+  --success-fg: #15803d;
+  --danger-fg: #dc2626;
+  --warning-fg: #b45309;
+  --on-accent-soft: var(--accent-strong);
+
+  --border: rgba(15, 23, 42, 0.1);
+  --border-strong: rgba(15, 23, 42, 0.18);
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(15, 23, 42, 0.08);
+  --glass-hover: rgba(241, 245, 249, 0.86);
+  --glass-blur: blur(24px) saturate(1.35);
+
+  --glow-1: #60a5fa;
+  --glow-2: #fb923c;
+  --glow-mix-1: 14%;
+  --glow-mix-2: 10%;
+  --bg-grad-1: #eef2f8;
+  --bg-grad-2: #e2e8f1;
+  --bg-grad-3: #d8e0ed;
+
+  --hairline: rgba(15, 23, 42, 0.1);
+  --hairline-soft: rgba(15, 23, 42, 0.07);
+  --hairline-faint: rgba(15, 23, 42, 0.03);
+  --code-bg: rgba(15, 23, 42, 0.05);
+  --code-inline-bg: rgba(15, 23, 42, 0.07);
+  --inset-bg: rgba(15, 23, 42, 0.04);
+  --scrim: rgba(15, 23, 42, 0.42);
+  --link-color: #2563eb;
+  --table-head-bg: rgba(15, 23, 42, 0.05);
+  --table-stripe: rgba(15, 23, 42, 0.025);
+  --grid-line: rgba(15, 23, 42, 0.035);
+  --placeholder: rgba(71, 85, 105, 0.6);
+  --option-bg: #ffffff;
+  --scrollbar-thumb: rgba(15, 23, 42, 0.18);
+  --scrollbar-hover: rgba(15, 23, 42, 0.3);
+
+  --shadow: 0 18px 50px rgba(15, 23, 42, 0.12);
+  --elevation-1: 0 10px 30px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --elevation-2: 0 20px 60px rgba(15, 23, 42, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --elevation-3: 0 28px 90px rgba(15, 23, 42, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+[data-theme="carbon"][data-mode="light"] {
+  --bg: #f3f4f6;
+  --bg-soft: #e7e9ee;
+  --bg-grad-1: #f3f4f6;
+  --bg-grad-2: #e7e9ee;
+  --bg-grad-3: #dde0e6;
+
+  --accent: #0284c7;
+  --accent-hover: #0369a1;
+  --accent-strong: #075985;
+  --accent-soft: rgba(2, 132, 199, 0.12);
+  --accent-warm: #64748b;
+  --accent-warm-soft: rgba(100, 116, 139, 0.14);
+
+  --glow-1: #38bdf8;
+  --glow-2: #94a3b8;
+  --link-color: #0369a1;
+}
+
+[data-theme="emerald"][data-mode="light"] {
+  --bg: #edf6f1;
+  --bg-soft: #e0eee6;
+  --bg-grad-1: #edf6f1;
+  --bg-grad-2: #e0eee6;
+  --bg-grad-3: #d6e9dc;
+
+  --accent: #059669;
+  --accent-hover: #047857;
+  --accent-strong: #065f46;
+  --accent-soft: rgba(5, 150, 105, 0.12);
+  --accent-warm: #65a30d;
+  --accent-warm-soft: rgba(101, 163, 13, 0.14);
+
+  --glow-1: #34d399;
+  --glow-2: #a3e635;
+  --link-color: #047857;
+}
+
+[data-theme="violet"][data-mode="light"] {
+  --bg: #f3effa;
+  --bg-soft: #e9e2f4;
+  --bg-grad-1: #f3effa;
+  --bg-grad-2: #e9e2f4;
+  --bg-grad-3: #ddd5ee;
+
+  --accent: #7c3aed;
+  --accent-hover: #6d28d9;
+  --accent-strong: #5b21b6;
+  --accent-soft: rgba(124, 58, 237, 0.12);
+  --accent-warm: #db2777;
+  --accent-warm-soft: rgba(219, 39, 119, 0.12);
+
+  --glow-1: #a78bfa;
+  --glow-2: #f472b6;
+  --link-color: #6d28d9;
+}
+
+[data-theme="rose"][data-mode="light"] {
+  --bg: #fbf0f3;
+  --bg-soft: #f6e3e8;
+  --bg-grad-1: #fbf0f3;
+  --bg-grad-2: #f6e3e8;
+  --bg-grad-3: #eed8de;
+
+  --accent: #e11d48;
+  --accent-hover: #be123c;
+  --accent-strong: #9f1239;
+  --accent-soft: rgba(225, 29, 72, 0.12);
+  --accent-warm: #ea580c;
+  --accent-warm-soft: rgba(234, 88, 12, 0.12);
+
+  --glow-1: #fb7185;
+  --glow-2: #fdba74;
+  --link-color: #be123c;
+}
+
+[data-theme="amber"][data-mode="light"] {
+  --bg: #fbf5ea;
+  --bg-soft: #f5e9d4;
+  --bg-grad-1: #fbf5ea;
+  --bg-grad-2: #f5e9d4;
+  --bg-grad-3: #eeddc1;
+
+  --accent: #d97706;
+  --accent-hover: #b45309;
+  --accent-strong: #92400e;
+  --accent-soft: rgba(217, 119, 6, 0.14);
+  --accent-warm: #ea580c;
+  --accent-warm-soft: rgba(234, 88, 12, 0.12);
+
+  --glow-1: #fbbf24;
+  --glow-2: #fb923c;
+  --link-color: #b45309;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -218,8 +417,8 @@ html {
 body {
   position: relative;
   background:
-    radial-gradient(circle at 12% -12%, color-mix(in srgb, var(--glow-1) 24%, transparent), transparent 34%),
-    radial-gradient(circle at 88% 8%, color-mix(in srgb, var(--glow-2) 18%, transparent), transparent 32%),
+    radial-gradient(circle at 12% -12%, color-mix(in srgb, var(--glow-1) var(--glow-mix-1), transparent), transparent 34%),
+    radial-gradient(circle at 88% 8%, color-mix(in srgb, var(--glow-2) var(--glow-mix-2), transparent), transparent 32%),
     linear-gradient(135deg, var(--bg-grad-1) 0%, var(--bg-grad-2) 48%, var(--bg-grad-3) 100%);
   color: var(--text);
   overflow: hidden;
@@ -236,8 +435,8 @@ html[data-window-effect="acrylic"] {
 html[data-window-effect="mica"] body,
 html[data-window-effect="acrylic"] body {
   background:
-    radial-gradient(circle at 12% -12%, color-mix(in srgb, var(--glow-1) 24%, transparent), transparent 34%),
-    radial-gradient(circle at 88% 8%, color-mix(in srgb, var(--glow-2) 18%, transparent), transparent 32%),
+    radial-gradient(circle at 12% -12%, color-mix(in srgb, var(--glow-1) var(--glow-mix-1), transparent), transparent 34%),
+    radial-gradient(circle at 88% 8%, color-mix(in srgb, var(--glow-2) var(--glow-mix-2), transparent), transparent 32%),
     linear-gradient(135deg,
       color-mix(in srgb, var(--bg-grad-1) 60%, transparent) 0%,
       color-mix(in srgb, var(--bg-grad-2) 60%, transparent) 48%,
@@ -250,8 +449,8 @@ body::before {
   inset: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(148, 163, 184, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.035) 1px, transparent 1px);
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size: 40px 40px;
   mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.72), transparent 72%);
 }
@@ -282,11 +481,11 @@ select {
 
 input::placeholder,
 textarea::placeholder {
-  color: rgba(148, 163, 184, 0.68);
+  color: var(--placeholder);
 }
 
 select option {
-  background: #0f172a;
+  background: var(--option-bg);
   color: var(--text);
 }
 
@@ -314,14 +513,14 @@ select:focus-visible,
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.22);
+  background: var(--scrollbar-thumb);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(203, 213, 225, 0.34);
+  background: var(--scrollbar-hover);
   background-clip: padding-box;
 }
 

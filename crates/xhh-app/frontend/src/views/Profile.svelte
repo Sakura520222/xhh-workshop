@@ -444,7 +444,7 @@
     font-size: 13px;
   }
   .status.error {
-    color: #f87171;
+    color: var(--danger);
   }
   .sentinel {
     height: 1px;

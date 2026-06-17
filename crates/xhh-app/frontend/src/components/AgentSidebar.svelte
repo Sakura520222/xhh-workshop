@@ -423,7 +423,7 @@
 
   .icon-action.danger:hover:not(:disabled) {
     background: rgba(248, 113, 113, 0.16);
-    color: #fecaca;
+    color: var(--danger-fg);
   }
 
   .icon-action:disabled {
@@ -437,7 +437,7 @@
     margin: 4px 8px;
     padding: 6px 8px;
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--fill-strong);
     color: var(--text-strong);
     border: 1px solid color-mix(in srgb, var(--accent-hover) 40%, transparent);
     font-size: 13px;
@@ -566,7 +566,7 @@
     padding: 1px 6px;
     border-radius: 999px;
     background: var(--accent-soft);
-    color: #bfdbfe;
+    color: var(--on-accent-soft);
     border: 1px solid color-mix(in srgb, var(--accent-hover) 20%, transparent);
     font-size: 9px;
     font-weight: 700;
@@ -586,7 +586,7 @@
     z-index: 1100;
     display: grid;
     place-items: center;
-    background: rgba(2, 6, 23, 0.62);
+    background: var(--scrim);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
   }

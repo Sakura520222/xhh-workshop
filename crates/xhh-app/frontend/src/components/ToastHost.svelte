@@ -51,7 +51,7 @@
     animation: toast-in var(--duration-normal) var(--ease-out);
   }
   .toast.info { border-left: 3px solid var(--accent); }
-  .toast.success { border-left: 3px solid #34d399; }
+  .toast.success { border-left: 3px solid var(--success); }
   .toast.error { border-left: 3px solid var(--danger); }
   .toast-body { flex: 1; min-width: 0; }
   .toast-title { font-size: 13px; font-weight: 650; color: var(--text-strong); }

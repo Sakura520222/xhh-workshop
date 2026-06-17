@@ -174,6 +174,48 @@ export function setTheme(t: Theme) {
   } catch { /* ignore */ }
 }
 
+// 明暗模式（与主题色系正交：data-mode="dark|light"）
+export type ColorMode = "dark" | "light";
+
+const COLOR_MODE_STORAGE_KEY = "xhh_color_mode";
+const DEFAULT_COLOR_MODE: ColorMode = "dark";
+
+function loadPersistedColorMode(): ColorMode {
+  try {
+    const raw = localStorage.getItem(COLOR_MODE_STORAGE_KEY) as ColorMode | null;
+    if (raw === "dark" || raw === "light") return raw;
+  } catch { /* ignore */ }
+  return DEFAULT_COLOR_MODE;
+}
+
+const _initialColorMode = loadPersistedColorMode();
+let _colorMode = $state<ColorMode>(_initialColorMode);
+
+function applyColorMode(m: ColorMode) {
+  document.documentElement.dataset.mode = m;
+}
+
+// 模块加载时立即应用，避免首屏明暗闪烁
+if (typeof document !== "undefined") {
+  applyColorMode(_initialColorMode);
+}
+
+export function getColorMode() {
+  return _colorMode;
+}
+
+export function setColorMode(m: ColorMode) {
+  _colorMode = m;
+  applyColorMode(m);
+  try {
+    localStorage.setItem(COLOR_MODE_STORAGE_KEY, m);
+  } catch { /* ignore */ }
+}
+
+export function toggleColorMode() {
+  setColorMode(_colorMode === "dark" ? "light" : "dark");
+}
+
 // 窗口效果（前端 attr 控制 body 背景透明度，实际效果由后端应用）
 const WINDOW_EFFECT_STORAGE_KEY = "xhh_window_effect";
 const VALID_WINDOW_EFFECTS: WindowEffect[] = ["none", "mica", "acrylic"];

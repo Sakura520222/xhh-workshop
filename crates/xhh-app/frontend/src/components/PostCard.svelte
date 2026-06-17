@@ -202,7 +202,7 @@
     padding: 6px 10px;
     border-radius: 999px;
     background: var(--accent-soft);
-    color: #bfdbfe;
+    color: var(--on-accent-soft);
     border: 1px solid color-mix(in srgb, var(--accent-hover) 18%, transparent);
   }
 
@@ -276,7 +276,7 @@
 
   .action:hover:not(:disabled) {
     background: var(--accent-soft);
-    color: #dbeafe;
+    color: var(--on-accent-soft);
     border-color: color-mix(in srgb, var(--accent-hover) 30%, transparent);
   }
 

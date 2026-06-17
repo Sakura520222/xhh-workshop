@@ -11,7 +11,7 @@
     cacheClear,
   } from "../lib/api";
   import type { WindowEffect, CacheStats } from "../lib/api";
-  import { getTheme, setTheme, THEMES, setWindowEffectAttr } from "../lib/stores.svelte";
+  import { getTheme, setTheme, THEMES, setWindowEffectAttr, getColorMode, setColorMode } from "../lib/stores.svelte";
 
   type ProviderKey = "openai" | "anthropic" | "ollama";
 
@@ -51,6 +51,7 @@
   let cacheSaved = $state(false);
 
   let currentTheme = $derived(getTheme());
+  let currentMode = $derived(getColorMode());
 
   const windowEffectOptions: { key: WindowEffect; label: string; hint: string }[] = [
     { key: "mica", label: "云母", hint: "Windows 11 推荐效果" },
@@ -226,6 +227,26 @@
           {/if}
         </button>
       {/each}
+    </div>
+
+    <div class="mode-row">
+      <span class="mode-label">显示模式</span>
+      <div class="mode-segment" role="group" aria-label="明暗模式">
+        <button
+          type="button"
+          class="seg"
+          class:active={currentMode === "dark"}
+          aria-pressed={currentMode === "dark"}
+          onclick={() => setColorMode("dark")}
+        >深色</button>
+        <button
+          type="button"
+          class="seg"
+          class:active={currentMode === "light"}
+          aria-pressed={currentMode === "light"}
+          onclick={() => setColorMode("light")}
+        >浅色</button>
+      </div>
     </div>
   </section>
 
@@ -427,7 +448,7 @@
     padding: 10px 14px;
     border-radius: 10px;
     background: rgba(248, 113, 113, 0.15);
-    color: #f87171;
+    color: var(--danger);
     font-size: 13px;
     border: 0.5px solid rgba(248, 113, 113, 0.2);
   }
@@ -466,12 +487,12 @@
     gap: 8px;
     padding: 14px 8px 12px;
     border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--fill);
     border: 0.5px solid var(--glass-border);
     transition: all var(--duration-fast) var(--ease-out);
   }
   .theme-card:hover {
-    background: rgba(255, 255, 255, 0.07);
+    background: var(--fill-strong);
     transform: translateY(-1px);
   }
   .theme-card.active {
@@ -505,6 +526,41 @@
     background: var(--preview);
     color: #fff;
   }
+  .mode-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-top: 4px;
+  }
+  .mode-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .mode-segment {
+    display: flex;
+    gap: 4px;
+    padding: 3px;
+    border-radius: 12px;
+    background: var(--fill);
+    border: 0.5px solid var(--glass-border);
+  }
+  .seg {
+    padding: 6px 18px;
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .seg:hover {
+    color: var(--text-strong);
+  }
+  .seg.active {
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
   .effect-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -518,12 +574,12 @@
     gap: 4px;
     padding: 14px 8px 12px;
     border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--fill);
     border: 0.5px solid var(--glass-border);
     transition: all var(--duration-fast) var(--ease-out);
   }
   .effect-card:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.07);
+    background: var(--fill-strong);
     transform: translateY(-1px);
   }
   .effect-card:disabled {
@@ -572,7 +628,7 @@
     transition: all var(--duration-fast) var(--ease-out);
   }
   .tab:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--fill-hover);
   }
   .tab.active {
     background: var(--accent);
@@ -592,7 +648,7 @@
   .input {
     padding: 9px 12px;
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--fill);
     color: var(--text);
     border: 0.5px solid var(--glass-border);
     font-size: 13px;
@@ -630,7 +686,7 @@
   }
   .saved-hint {
     font-size: 13px;
-    color: #4ade80;
+    color: var(--success-fg);
   }
   .status {
     text-align: center;
@@ -665,7 +721,7 @@
     color: var(--text-secondary);
     padding: 10px 12px;
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--fill);
     border: 0.5px solid var(--glass-border);
   }
   .cache-break {
@@ -697,7 +753,7 @@
   .cache-clear-btn {
     padding: 8px 18px;
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--fill-hover);
     color: var(--text);
     font-size: 13px;
     border: 0.5px solid var(--glass-border);
@@ -706,7 +762,7 @@
   .cache-clear-btn:hover:not(:disabled) {
     background: rgba(248, 113, 113, 0.15);
     border-color: rgba(248, 113, 113, 0.4);
-    color: #f87171;
+    color: var(--danger);
   }
   .cache-clear-btn:disabled {
     opacity: 0.5;

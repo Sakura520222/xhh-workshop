@@ -489,7 +489,7 @@
 
   .state-card.error {
     justify-content: flex-start;
-    color: #fecaca;
+    color: var(--danger-fg);
     background: var(--danger-soft);
     border-color: rgba(248, 113, 113, 0.24);
     text-align: left;
@@ -552,7 +552,7 @@
     padding: 4px 10px;
     border-radius: 999px;
     background: var(--accent-soft);
-    color: #bfdbfe;
+    color: var(--on-accent-soft);
     border: 1px solid color-mix(in srgb, var(--accent-hover) 18%, transparent);
     font-size: 12px;
     font-weight: 800;
@@ -561,7 +561,7 @@
 
   .badge.warm {
     background: var(--accent-warm-soft);
-    color: #fed7aa;
+    color: var(--warning-fg);
     border-color: color-mix(in srgb, var(--accent-warm) 24%, transparent);
   }
 

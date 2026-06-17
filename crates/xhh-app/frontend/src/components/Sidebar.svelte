@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { getView, setView, getAuth } from "../lib/stores.svelte";
+  import { getView, setView, getAuth, getColorMode, toggleColorMode } from "../lib/stores.svelte";
   import { authLogout } from "../lib/api";
   import { getUnread } from "../lib/notification.svelte";
 
   let view = $derived(getView());
   let auth = $derived(getAuth());
   let unread = $derived(getUnread());
+  let colorMode = $derived(getColorMode());
   let avatarBroken = $state(false);
   let showAvatar = $derived(!!auth.avatar && !avatarBroken);
   $effect(() => {
@@ -22,6 +23,8 @@
     zap: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
     settings: '<line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="2" x2="6" y1="14" y2="14"/><line x1="10" x2="14" y1="8" y2="8"/><line x1="18" x2="22" y1="16" y2="16"/>',
     logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+    moon: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/>',
   };
 
   let menus = [
@@ -77,6 +80,19 @@
   </div>
 
   <div class="bottom">
+    <button
+      class="mode-toggle"
+      onclick={toggleColorMode}
+      aria-label="切换明暗模式"
+      aria-pressed={colorMode === "light"}
+      title={colorMode === "light" ? "切换到深色" : "切换到浅色"}
+    >
+      <span class="icon-shell">
+        <svg class="mi" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{@html colorMode === "light" ? icons.sun : icons.moon}</svg>
+      </span>
+      <span class="label">{colorMode === "light" ? "浅色" : "深色"}</span>
+      <span class="switch" aria-hidden="true"><span class="switch-thumb"></span></span>
+    </button>
     <button class="menu-item logout" onclick={handleLogout} aria-label="退出登录">
       <span class="icon-shell">
         <svg class="mi" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{@html icons.logout}</svg>
@@ -234,7 +250,7 @@
 
  .menu-item.active .icon-shell {
    background: color-mix(in srgb, var(--accent) 22%, transparent);
-   color: #bfdbfe;
+   color: var(--on-accent-soft);
  }
 
   .badge {
@@ -263,12 +279,65 @@
     border-top: 1px solid rgba(148, 163, 184, 0.12);
   }
 
+  .mode-toggle {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    min-height: 44px;
+    margin-bottom: 6px;
+    padding: 9px 12px;
+    border-radius: 14px;
+    width: 100%;
+    text-align: left;
+    font-size: 14px;
+    font-weight: 650;
+    color: var(--text-secondary);
+    transition: background var(--duration-normal) var(--ease-out), color var(--duration-normal) var(--ease-out);
+  }
+
+  .mode-toggle:hover {
+    background: rgba(148, 163, 184, 0.1);
+    color: var(--text-strong);
+  }
+
+  .switch {
+    margin-left: auto;
+    position: relative;
+    width: 36px;
+    height: 20px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.28);
+    flex-shrink: 0;
+    transition: background var(--duration-normal) var(--ease-out);
+  }
+
+  .switch-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.32);
+    transition: transform var(--duration-normal) var(--ease-spring);
+  }
+
+  .mode-toggle[aria-pressed="true"] .switch {
+    background: var(--accent);
+  }
+
+  .mode-toggle[aria-pressed="true"] .switch-thumb {
+    transform: translateX(16px);
+  }
+
   .logout {
     color: rgba(248, 113, 113, 0.86);
   }
 
   .logout:hover {
     background: var(--danger-soft);
-    color: #fecaca;
+    color: var(--danger-fg);
   }
 </style>

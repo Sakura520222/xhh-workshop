@@ -134,7 +134,7 @@
     display: grid;
     place-items: center;
     padding: 24px;
-    background: rgba(2, 6, 23, 0.62);
+    background: var(--scrim);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     animation: backdrop-in 160ms var(--ease-out);
@@ -177,7 +177,7 @@
   .input {
     padding: 10px 12px;
     border-radius: 12px;
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--fill-hover);
     color: var(--text);
     border: 1px solid var(--glass-border);
     font-size: 13px;
@@ -201,7 +201,7 @@
     padding: 8px 12px;
     border-radius: 10px;
     background: rgba(248, 113, 113, 0.12);
-    color: #fca5a5;
+    color: var(--danger-fg);
     font-size: 12px;
     border: 1px solid rgba(248, 113, 113, 0.22);
   }
@@ -248,7 +248,7 @@
 
   .btn-danger {
     background: rgba(248, 113, 113, 0.16);
-    color: #fecaca;
+    color: var(--danger-fg);
     border: 1px solid rgba(248, 113, 113, 0.28);
   }
 

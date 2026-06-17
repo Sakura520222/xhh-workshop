@@ -3,7 +3,7 @@
 //! 设计：
 //! - [`Tool`] trait — 统一接口
 //! - [`ToolRegistry`] — 集中注册 + 按 name 查找
-//! - 17 个内置工具，覆盖帖子/评论/点赞/收藏/搜索/社区/用户/上传全部功能
+//! - 20 个内置工具，覆盖帖子/评论/点赞/收藏/搜索/社区/用户/上传全部功能
 //!
 //! 每个 Tool 接收 JSON 字符串参数，返回 JSON 字符串结果。
 
@@ -93,7 +93,7 @@ impl ToolRegistry {
         }
     }
 
-    /// 注册全部内置工具（17 个）
+    /// 注册全部内置工具（20 个）
     pub fn with_defaults() -> Self {
         let mut reg = Self::new();
         // 查询类
@@ -116,6 +116,9 @@ impl ToolRegistry {
         reg.register(Box::new(LikePostTool));
         reg.register(Box::new(LikeCommentTool));
         reg.register(Box::new(FavouriteTool));
+        reg.register(Box::new(ListFavouriteFoldersTool));
+        reg.register(Box::new(CreateFavouriteFolderTool));
+        reg.register(Box::new(ListFavouriteLinksTool));
         // 上传
         reg.register(Box::new(UploadImageTool));
         reg
@@ -625,17 +628,22 @@ impl Tool for FavouriteTool {
     fn spec(&self) -> ToolSpec {
         ToolSpec::new(
             "favourite",
-            "收藏某个帖子（toggle 切换式）。",
+            "收藏或取消收藏帖子。favour_type=1 收藏（folder_id 指定收藏夹，省略为默认收藏夹）；favour_type=2 取消收藏（folder_id 指定从哪个收藏夹移除）。",
             json!({
                 "type": "object",
                 "properties": {
                     "link_id": {"type": "string", "description": "目标帖子 ID"},
+                    "favour_type": {
+                        "type": "integer",
+                        "description": "操作类型：1=收藏，2=取消",
+                        "enum": [1, 2]
+                    },
                     "folder_id": {
                         "type": "string",
-                        "description": "（可选）收藏夹 ID，默认收藏夹可省略"
+                        "description": "（可选）收藏夹 ID"
                     }
                 },
-                "required": ["link_id"]
+                "required": ["link_id", "favour_type"]
             }),
         )
     }
@@ -648,30 +656,18 @@ impl Tool for FavouriteTool {
         let v = parsed_args(arguments_json);
         let link_id = arg_str(&v, "link_id");
         let folder_id = arg_str(&v, "folder_id");
+        let favour_type = v.get("favour_type").and_then(|t| t.as_i64()).unwrap_or(1);
+        let action = if favour_type == 2 { "取消收藏" } else { "收藏" };
+        let id_disp = if link_id.is_empty() { "未提供 ID" } else { link_id };
         let target = if folder_id.is_empty() {
-            format!(
-                "帖子 {}",
-                if link_id.is_empty() {
-                    "未提供 ID"
-                } else {
-                    link_id
-                }
-            )
+            format!("帖子 {}", id_disp)
         } else {
-            format!(
-                "帖子 {} 到收藏夹 {}",
-                if link_id.is_empty() {
-                    "未提供 ID"
-                } else {
-                    link_id
-                },
-                folder_id
-            )
+            format!("帖子 {}（收藏夹 {}）", id_disp, folder_id)
         };
         ToolConfirmation {
             tool_name: self.name(),
             risk_level: RiskLevel::Medium,
-            summary: format!("切换{}的收藏状态", target),
+            summary: format!("{}{}", action, target),
             arguments_json: arguments_json.to_string(),
         }
     }
@@ -683,24 +679,194 @@ impl Tool for FavouriteTool {
         })?;
         let link_id = v.get("link_id").and_then(|s| s.as_str()).unwrap_or("");
         let folder_id = v.get("folder_id").and_then(|s| s.as_str()).unwrap_or("");
+        let favour_type = v.get("favour_type").and_then(|t| t.as_i64()).unwrap_or(1);
         if link_id.is_empty() {
             return Err(Error::ToolCall {
                 tool: self.name().into(),
                 msg: "link_id 不能为空".into(),
             });
         }
-        let folder = if folder_id.is_empty() {
-            None
+        let folder = if folder_id.is_empty() { None } else { Some(folder_id) };
+        let result = if favour_type == 2 {
+            api_inter::unfavourite(client, link_id, folder).await
         } else {
-            Some(folder_id)
+            api_inter::favourite(client, link_id, folder).await
         };
-        api_inter::favourite(client, link_id, folder)
-            .await
-            .map_err(|e| Error::ToolCall {
+        result.map_err(|e| Error::ToolCall {
+            tool: self.name().into(),
+            msg: e.to_string(),
+        })?;
+        let msg = if favour_type == 2 { "取消收藏成功" } else { "收藏成功" };
+        Ok(json!({"ok": true, "message": msg}).to_string())
+    }
+}
+
+/// 查看收藏夹列表
+pub struct ListFavouriteFoldersTool;
+
+#[async_trait]
+impl Tool for ListFavouriteFoldersTool {
+    fn name(&self) -> &'static str {
+        "list_favourite_folders"
+    }
+
+    fn spec(&self) -> ToolSpec {
+        ToolSpec::new(
+            "list_favourite_folders",
+            "查看当前登录用户的收藏夹列表（返回每个收藏夹的 id、名称、收藏数）。收藏帖子时可用 folder_id 指定目标收藏夹。",
+            json!({
+                "type": "object",
+                "properties": {}
+            }),
+        )
+    }
+
+    async fn execute(&self, client: &XhhClient, _args: &str) -> Result<String> {
+        let resp = api_inter::favourite_folders(client).await?;
+        let folders = resp
+            .pointer("/result/folders")
+            .and_then(|a| a.as_array())
+            .cloned()
+            .unwrap_or_default();
+        let list: Vec<Value> = folders
+            .iter()
+            .map(|f| {
+                json!({
+                    "id": f.get("id"),
+                    "name": f.get("name"),
+                    "count": f.get("count"),
+                })
+            })
+            .collect();
+        Ok(json!({"count": list.len(), "folders": list}).to_string())
+    }
+}
+
+/// 创建收藏夹
+pub struct CreateFavouriteFolderTool;
+
+#[async_trait]
+impl Tool for CreateFavouriteFolderTool {
+    fn name(&self) -> &'static str {
+        "create_favourite_folder"
+    }
+
+    fn spec(&self) -> ToolSpec {
+        ToolSpec::new(
+            "create_favourite_folder",
+            "创建一个新的收藏夹，返回新收藏夹的 id 和名称。创建后可用 favourite 工具收藏帖子到该夹。",
+            json!({
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "收藏夹名称"}
+                },
+                "required": ["name"]
+            }),
+        )
+    }
+
+    fn requires_confirmation(&self) -> bool {
+        true
+    }
+
+    fn confirmation(&self, arguments_json: &str) -> ToolConfirmation {
+        let v = parsed_args(arguments_json);
+        let name = arg_str(&v, "name");
+        ToolConfirmation {
+            tool_name: self.name(),
+            risk_level: RiskLevel::Medium,
+            summary: format!("创建收藏夹「{}」", if name.is_empty() { "未提供名称" } else { name }),
+            arguments_json: arguments_json.to_string(),
+        }
+    }
+
+    async fn execute(&self, client: &XhhClient, args_json: &str) -> Result<String> {
+        let v: Value = serde_json::from_str(args_json).map_err(|e| Error::ToolCall {
+            tool: self.name().into(),
+            msg: format!("参数解析失败: {}", e),
+        })?;
+        let name = v.get("name").and_then(|s| s.as_str()).unwrap_or("");
+        if name.is_empty() {
+            return Err(Error::ToolCall {
                 tool: self.name().into(),
-                msg: e.to_string(),
-            })?;
-        Ok(json!({"ok": true, "message": "收藏成功"}).to_string())
+                msg: "name 不能为空".into(),
+            });
+        }
+        let resp = api_inter::create_favourite_folder(client, name).await?;
+        let folder = resp.pointer("/result/folder").cloned().unwrap_or(json!({}));
+        Ok(json!({
+            "ok": true,
+            "folder": {
+                "id": folder.get("id"),
+                "name": folder.get("name"),
+                "count": folder.get("count"),
+            }
+        }).to_string())
+    }
+}
+
+/// 查看收藏夹内容（收藏的帖子）
+pub struct ListFavouriteLinksTool;
+
+#[async_trait]
+impl Tool for ListFavouriteLinksTool {
+    fn name(&self) -> &'static str {
+        "list_favourite_links"
+    }
+
+    fn spec(&self) -> ToolSpec {
+        ToolSpec::new(
+            "list_favourite_links",
+            "查看收藏的帖子列表。folder_id 省略=全部收藏；指定 folder_id=某个收藏夹的内容。offset/limit 分页。",
+            json!({
+                "type": "object",
+                "properties": {
+                    "folder_id": {"type": "string", "description": "（可选）收藏夹 ID，省略返回全部收藏"},
+                    "offset": {"type": "integer", "description": "（可选）分页偏移，默认 0"},
+                    "limit": {"type": "integer", "description": "（可选）每页数量，默认 30"}
+                }
+            }),
+        )
+    }
+
+    async fn execute(&self, client: &XhhClient, args_json: &str) -> Result<String> {
+        let v: Value = if args_json.is_empty() {
+            json!({})
+        } else {
+            serde_json::from_str(args_json).map_err(|e| Error::ToolCall {
+                tool: self.name().into(),
+                msg: format!("参数解析失败: {}", e),
+            })?
+        };
+        let folder_id = v.get("folder_id").and_then(|s| s.as_str()).unwrap_or("");
+        let offset = v.get("offset").and_then(|n| n.as_u64()).unwrap_or(0) as u32;
+        let limit = v.get("limit").and_then(|n| n.as_u64()).unwrap_or(30) as u32;
+        let folder = if folder_id.is_empty() { None } else { Some(folder_id) };
+        let resp = api_inter::favourite_folder_links(client, folder, offset, limit).await?;
+        let links = resp
+            .pointer("/result/links")
+            .and_then(|a| a.as_array())
+            .cloned()
+            .unwrap_or_default();
+        let has_next = resp
+            .pointer("/result/has_next")
+            .and_then(|x| x.as_str())
+            .map(String::from)
+            .unwrap_or_default();
+        let list: Vec<Value> = links
+            .iter()
+            .map(|item| {
+                let l = item.get("link").cloned().unwrap_or(json!({}));
+                json!({
+                    "link_id": l.get("linkid"),
+                    "title": l.get("title"),
+                    "comment_num": l.get("comment_num"),
+                    "like_num": l.get("link_award_num"),
+                    "author": l.pointer("/user/username"),
+                })
+            })
+            .collect();
+        Ok(json!({"count": list.len(), "posts": list, "offset": offset, "has_next": has_next}).to_string())
     }
 }
 
@@ -1476,15 +1642,18 @@ mod tests {
         assert!(names.contains(&"like_post"));
         assert!(names.contains(&"like_comment"));
         assert!(names.contains(&"favourite"));
+        assert!(names.contains(&"list_favourite_folders"));
+        assert!(names.contains(&"create_favourite_folder"));
+        assert!(names.contains(&"list_favourite_links"));
         // 上传
         assert!(names.contains(&"upload_image"));
-        assert_eq!(reg.names().len(), 17);
+        assert_eq!(reg.names().len(), 20);
     }
 
     #[test]
     fn specs_are_valid_json_schema() {
         let reg = ToolRegistry::with_defaults();
-        assert_eq!(reg.specs().len(), 17);
+        assert_eq!(reg.specs().len(), 20);
         for s in reg.specs() {
             assert!(!s.name.is_empty());
             assert!(s.parameters.is_object());

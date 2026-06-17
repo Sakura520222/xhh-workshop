@@ -37,14 +37,27 @@ pub struct LoginResult {
 /// 扫码登录（阻塞轮询，最长 300s）
 #[tauri::command]
 pub async fn auth_login(
+    app: AppHandle,
     state: State<'_, AppState>,
     raw_query: String,
     device_id: String,
 ) -> Result<LoginResult, String> {
     tracing::info!(device_id = %device_id, "开始扫码登录轮询");
+    let my_gen = state.begin_login_generation();
     let anon = XhhClient::anonymous(Some(device_id.clone())).map_err(|e| e.to_string())?;
     let deadline = Instant::now() + Duration::from_secs(300);
+    let mut scanned_notified = false;
     loop {
+        if state.login_cancelled(my_gen) {
+            tracing::info!("扫码登录被取消（代际过期），退出轮询");
+            return Ok(LoginResult {
+                ok: false,
+                nickname: String::new(),
+                heybox_id: String::new(),
+                avatar: String::new(),
+                message: "已取消".into(),
+            });
+        }
         if Instant::now() > deadline {
             return Ok(LoginResult {
                 ok: false,
@@ -55,7 +68,15 @@ pub async fn auth_login(
             });
         }
         match poll_qr_state_once(&anon, &raw_query, &device_id).await {
-            Ok(QrPollResult::Waiting { .. }) | Ok(QrPollResult::Scanned) => {
+            Ok(QrPollResult::Waiting { .. }) => {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+            Ok(QrPollResult::Scanned) => {
+                if !scanned_notified {
+                    scanned_notified = true;
+                    tracing::info!("二维码已扫码，等待手机端确认");
+                    let _ = app.emit("auth-scanned", ());
+                }
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
             Ok(QrPollResult::Success(mut s)) => {
@@ -84,6 +105,14 @@ pub async fn auth_login(
             }
         }
     }
+}
+
+/// 取消正在进行的扫码登录轮询（刷新二维码或放弃当前扫码时调用）
+#[tauri::command]
+pub async fn auth_cancel_login(state: State<'_, AppState>) -> Result<(), String> {
+    state.bump_login_generation();
+    tracing::info!("收到取消扫码登录请求");
+    Ok(())
 }
 
 /// 检查当前登录态

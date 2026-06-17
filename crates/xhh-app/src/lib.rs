@@ -41,6 +41,7 @@ pub fn run() {
             // auth
             commands::auth_get_qr_code,
             commands::auth_login,
+            commands::auth_cancel_login,
             commands::auth_status,
             commands::auth_logout,
             // feeds

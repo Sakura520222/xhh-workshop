@@ -363,7 +363,7 @@
         <h3 class="section-title">通用参数</h3>
         <div class="field-group">
           <label class="label" for="max-loops">最大循环轮数</label>
-          <input id="max-loops" type="number" bind:value={maxLoops} class="input" min="1" max="50" />
+          <input id="max-loops" type="number" bind:value={maxLoops} class="input" min="1" max="500" />
         </div>
         <div class="field-group">
           <label class="label" for="temperature">Temperature (0-2，留空用默认)</label>

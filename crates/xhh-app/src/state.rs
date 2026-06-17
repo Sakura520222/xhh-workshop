@@ -157,6 +157,9 @@ pub struct AppState {
     /// 全局共享 runner，所有会话复用同一份 AgentConfig
     pub agent_runner: Arc<Mutex<Option<AgentRunner>>>,
     pub agent_sessions: Arc<Mutex<AgentSessions>>,
+    /// 扫码登录轮询代际：每次开始新轮询或主动取消时自增，
+    /// 正在轮询的任务发现自己的代际已过期即退出
+    pub login_generation: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl Default for AppState {
@@ -165,6 +168,7 @@ impl Default for AppState {
             inner: Arc::new(RwLock::new(None)),
             agent_runner: Arc::new(Mutex::new(None)),
             agent_sessions: Arc::new(Mutex::new(AgentSessions::new())),
+            login_generation: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
     }
 }
@@ -213,5 +217,43 @@ impl AppState {
         let mut sessions = self.agent_sessions.lock().await;
         sessions.sessions.clear();
         sessions.active_id.clear();
+    }
+
+    /// 开始一轮扫码登录，返回这轮的代际号
+    pub fn begin_login_generation(&self) -> u64 {
+        use std::sync::atomic::Ordering;
+        self.login_generation.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    /// 推进代际，使所有正在进行的旧轮次在下次检查时退出
+    pub fn bump_login_generation(&self) {
+        use std::sync::atomic::Ordering;
+        self.login_generation.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// 给定轮次是否已被取代（开始新轮或主动取消）
+    pub fn login_cancelled(&self, gen: u64) -> bool {
+        use std::sync::atomic::Ordering;
+        self.login_generation.load(Ordering::SeqCst) != gen
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn login_generation_is_unique_and_cancelable() {
+        let state = AppState::default();
+        let g1 = state.begin_login_generation();
+        assert!(!state.login_cancelled(g1), "刚开始的轮次不应被判为取消");
+
+        state.bump_login_generation();
+        assert!(state.login_cancelled(g1), "主动取消后旧轮次应失效");
+
+        let g2 = state.begin_login_generation();
+        assert_ne!(g1, g2, "每轮代际号应递增");
+        assert!(!state.login_cancelled(g2), "新轮次未被取消");
+        assert!(state.login_cancelled(g1), "开始新轮次后旧轮次应失效");
     }
 }

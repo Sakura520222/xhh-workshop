@@ -43,7 +43,26 @@ export const authGetQrCode = (): Promise<QrCodeResp> =>
 export const authLogin = (raw_query: string, device_id: string): Promise<LoginResult> =>
   invoke("auth_login", { rawQuery: raw_query, deviceId: device_id });
 
+// 取消正在进行的扫码登录轮询（刷新二维码 / 放弃当前扫码）
+export const authCancelLogin = (): Promise<void> => invoke("auth_cancel_login");
+
 export const authStatus = (): Promise<LoginResult> => invoke("auth_status");
+
+// 监听二维码已扫码（等待手机端确认）
+export function onAuthScanned(cb: () => void): () => void {
+  let unlisten: (() => void) | null = null;
+  let done = false;
+  listen("auth-scanned", () => {
+    if (!done) cb();
+  }).then((fn) => {
+    if (done) fn();
+    else unlisten = fn;
+  });
+  return () => {
+    done = true;
+    unlisten?.();
+  };
+}
 
 export const authLogout = (): Promise<void> => invoke("auth_logout");
 

@@ -16,6 +16,7 @@ const PATH_LIKE_COMMENT: &str = "/bbs/app/comment/support";
 const PATH_FAVOUR: &str = "/bbs/app/link/favour";
 const PATH_FAV_FOLDERS: &str = "/bbs/app/profile/fav/folders";
 const PATH_FAV_FOLDER_ADD: &str = "/bbs/app/profile/fav/folder/add";
+const PATH_FAV_FOLDER_DEL: &str = "/bbs/app/profile/fav/folder/del";
 const PATH_FAV_FOLDER_LINKS: &str = "/bbs/app/profile/fav/folder/v2/links";
 
 /// 帖子点赞 / 取消点赞（显式操作，非切换）
@@ -93,6 +94,14 @@ pub async fn create_favourite_folder(client: &XhhClient, name: &str) -> Result<V
     let mut body = BTreeMap::new();
     body.insert("name".into(), name.into());
     client.post(PATH_FAV_FOLDER_ADD, &body, 0).await
+}
+
+/// 删除收藏夹
+pub async fn delete_favourite_folder(client: &XhhClient, folder_id: &str) -> Result<Value> {
+    tracing::info!(folder_id = %folder_id, "删除收藏夹");
+    let mut body = BTreeMap::new();
+    body.insert("folder_id".into(), folder_id.into());
+    client.post(PATH_FAV_FOLDER_DEL, &body, 0).await
 }
 
 /// 收藏夹内容列表（offset 分页）

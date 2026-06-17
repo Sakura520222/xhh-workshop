@@ -3,7 +3,7 @@
 //! 设计：
 //! - [`Tool`] trait — 统一接口
 //! - [`ToolRegistry`] — 集中注册 + 按 name 查找
-//! - 21 个内置工具，覆盖帖子/评论/点赞/收藏/搜索/社区/用户/上传全部功能
+//! - 22 个内置工具，覆盖帖子/评论/点赞/收藏/搜索/社区/用户/上传全部功能
 //!
 //! 每个 Tool 接收 JSON 字符串参数，返回 JSON 字符串结果。
 
@@ -93,7 +93,7 @@ impl ToolRegistry {
         }
     }
 
-    /// 注册全部内置工具（21 个）
+    /// 注册全部内置工具（22 个）
     pub fn with_defaults() -> Self {
         let mut reg = Self::new();
         // 查询类
@@ -118,6 +118,7 @@ impl ToolRegistry {
         reg.register(Box::new(FavouriteTool));
         reg.register(Box::new(ListFavouriteFoldersTool));
         reg.register(Box::new(CreateFavouriteFolderTool));
+        reg.register(Box::new(DeleteFavouriteFolderTool));
         reg.register(Box::new(ListFavouriteLinksTool));
         reg.register(Box::new(MoveFavouriteTool));
         // 上传
@@ -802,6 +803,68 @@ impl Tool for CreateFavouriteFolderTool {
                 "name": folder.get("name"),
                 "count": folder.get("count"),
             }
+        }).to_string())
+    }
+}
+
+/// 删除收藏夹
+pub struct DeleteFavouriteFolderTool;
+
+#[async_trait]
+impl Tool for DeleteFavouriteFolderTool {
+    fn name(&self) -> &'static str {
+        "delete_favourite_folder"
+    }
+
+    fn spec(&self) -> ToolSpec {
+        ToolSpec::new(
+            "delete_favourite_folder",
+            "删除指定的自定义收藏夹（不可逆）。folder_id 来自 list_favourite_folders 返回的 id；删除前建议先调 list_favourite_links 确认该夹内容。",
+            json!({
+                "type": "object",
+                "properties": {
+                    "folder_id": {"type": "string", "description": "要删除的收藏夹 ID"}
+                },
+                "required": ["folder_id"]
+            }),
+        )
+    }
+
+    fn requires_confirmation(&self) -> bool {
+        true
+    }
+
+    fn confirmation(&self, arguments_json: &str) -> ToolConfirmation {
+        let v = parsed_args(arguments_json);
+        let folder_id = arg_str(&v, "folder_id");
+        ToolConfirmation {
+            tool_name: self.name(),
+            risk_level: RiskLevel::High,
+            summary: format!(
+                "删除收藏夹 {}。此操作不可逆",
+                if folder_id.is_empty() { "未提供 ID" } else { folder_id }
+            ),
+            arguments_json: arguments_json.to_string(),
+        }
+    }
+
+    async fn execute(&self, client: &XhhClient, args_json: &str) -> Result<String> {
+        let v: Value = serde_json::from_str(args_json).map_err(|e| Error::ToolCall {
+            tool: self.name().into(),
+            msg: format!("参数解析失败: {}", e),
+        })?;
+        let folder_id = v.get("folder_id").and_then(|s| s.as_str()).unwrap_or("");
+        if folder_id.is_empty() {
+            return Err(Error::ToolCall {
+                tool: self.name().into(),
+                msg: "folder_id 不能为空".into(),
+            });
+        }
+        let resp = api_inter::delete_favourite_folder(client, folder_id).await?;
+        Ok(json!({
+            "ok": resp.get("status").and_then(|s| s.as_str()) == Some("ok"),
+            "folder_id": folder_id,
+            "message": "收藏夹已删除"
         }).to_string())
     }
 }
@@ -1726,17 +1789,18 @@ mod tests {
         assert!(names.contains(&"favourite"));
         assert!(names.contains(&"list_favourite_folders"));
         assert!(names.contains(&"create_favourite_folder"));
+        assert!(names.contains(&"delete_favourite_folder"));
         assert!(names.contains(&"list_favourite_links"));
         assert!(names.contains(&"move_favourite"));
         // 上传
         assert!(names.contains(&"upload_image"));
-        assert_eq!(reg.names().len(), 21);
+        assert_eq!(reg.names().len(), 22);
     }
 
     #[test]
     fn specs_are_valid_json_schema() {
         let reg = ToolRegistry::with_defaults();
-        assert_eq!(reg.specs().len(), 21);
+        assert_eq!(reg.specs().len(), 22);
         for s in reg.specs() {
             assert!(!s.name.is_empty());
             assert!(s.parameters.is_object());
@@ -1762,6 +1826,7 @@ mod tests {
             "like_post",
             "like_comment",
             "favourite",
+            "delete_favourite_folder",
             "upload_image",
         ];
         for name in dangerous {

@@ -103,8 +103,11 @@ export const likePost = (link_id: string, award_type: number): Promise<any> =>
 export const likeComment = (comment_id: string): Promise<any> =>
   invoke("like_comment", { commentId: comment_id });
 
-export const favourite = (link_id: string, folder_id?: string): Promise<any> =>
-  invoke("favourite", { linkId: link_id, folderId: folder_id });
+export const favourite = (link_id: string, folder_id: string | undefined, favour_type: number): Promise<any> =>
+  invoke("favourite", { linkId: link_id, folderId: folder_id, favourType: favour_type });
+
+export const createFavouriteFolder = (name: string): Promise<any> =>
+  invoke("create_favourite_folder", { name });
 
 // Search
 export const search = (req: SearchReq): Promise<any> => invoke("search", { req });

@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { postDetail, commentCreate, likePost, likeComment, saveImage as saveImageApi, subComments, aiAnalyzeStream, aiCacheGet, aiCacheSave } from "../lib/api";
+  import { postDetail, commentCreate, likePost, likeComment, saveImage as saveImageApi, subComments, aiAnalyzeStream, aiCacheGet, aiCacheSave, favourite, favourFolders, createFavouriteFolder } from "../lib/api";
   import type { AiCacheItem } from "../lib/api";
-  import { getSelectedLinkId, setView, getPrevView } from "../lib/stores.svelte";
+  import { getSelectedLinkId, setView, getPrevView, getFavState, setFavState, clearFavState } from "../lib/stores.svelte";
+  import { toastSuccess, toastInfo, toastError } from "../lib/toast.svelte";
   import { renderTextSync, renderAiMarkdown, preloadEmoji, getEmojiVersion } from "../lib/render.svelte";
   import { parsePostContent, type ContentSegment } from "../lib/content";
 
@@ -406,12 +407,95 @@
       if (e.key === "Escape") closeAiPanel();
       return;
     }
+    if (favPanel) {
+      if (e.key === "Escape") closeFavPanel();
+      return;
+    }
     if (viewerUrl) {
       if (e.key === "Escape") closeViewer();
       else if (e.key === "ArrowLeft") viewerPrev();
       else if (e.key === "ArrowRight") viewerNext();
     } else {
       if (e.key === "Escape") back();
+    }
+  }
+
+  // --- 收藏 ---
+  let favPanel = $state(false);
+  let favFolders = $state<any[] | null>(null);
+  let favBusy = $state(false);
+  let newFolderName = $state("");
+  let newFolderBusy = $state(false);
+  let curFav = $derived(getFavState(linkId));
+  let localFaved = $derived(!!curFav);
+  let lastFolderId = $derived(curFav?.folderId ?? "");
+  let lastFolderName = $derived(curFav?.folderName ?? "");
+
+  async function openFavPanel() {
+    if (!post) return;
+    favPanel = true;
+    if (favFolders === null) {
+      try {
+        const v = await favourFolders();
+        favFolders = v?.result?.folders ?? [];
+      } catch (e) {
+        console.error("load favour folders failed:", e);
+        favFolders = [];
+      }
+    }
+  }
+
+  function closeFavPanel() {
+    favPanel = false;
+    newFolderName = "";
+  }
+
+  async function doFavourite(folderId: string, folderName: string) {
+    if (favBusy || !linkId) return;
+    favBusy = true;
+    try {
+      await favourite(linkId, folderId || undefined, 1);
+      setFavState(linkId, { folderId, folderName });
+      toastSuccess("已收藏到 " + folderName);
+      closeFavPanel();
+    } catch (e) {
+      toastError("收藏失败", String(e));
+    } finally {
+      favBusy = false;
+    }
+  }
+
+  async function doCreateFavouriteFolder() {
+    const name = newFolderName.trim();
+    if (newFolderBusy || !name) return;
+    newFolderBusy = true;
+    try {
+      const v = await createFavouriteFolder(name);
+      const folder = v?.result?.folder ?? v?.result ?? null;
+      const fid = folder ? String(folder.id ?? "") : "";
+      const fname = folder?.name ?? name;
+      favFolders = [...(favFolders ?? []), { id: fid, name: fname, count: 0 }];
+      newFolderName = "";
+      await doFavourite(fid, fname);
+    } catch (e) {
+      toastError("创建收藏夹失败", String(e));
+    } finally {
+      newFolderBusy = false;
+    }
+  }
+
+  async function doUnfavourite() {
+    if (favBusy || !linkId) return;
+    favBusy = true;
+    try {
+      await favourite(linkId, lastFolderId || undefined, 2);
+      clearFavState(linkId);
+      toastInfo("已取消收藏");
+      closeFavPanel();
+    } catch (e) {
+      toastError("取消收藏失败", String(e));
+    } finally {
+      favBusy = false;
     }
   }
 
@@ -489,6 +573,46 @@
    </div>
  {/if}
 
+ {#if favPanel}
+   <!-- svelte-ignore a11y_click_events_have_key_events -->
+   <!-- svelte-ignore a11y_no_static_element_interactions -->
+   <div class="ai-overlay" onclick={closeFavPanel}>
+     <div class="ai-panel fav-panel" onclick={(e) => e.stopPropagation()}>
+       <div class="ai-header">
+         <span class="ai-title">收藏到</span>
+         <button class="ai-close" onclick={closeFavPanel}>关闭</button>
+       </div>
+       <div class="ai-body fav-body">
+         {#if localFaved}
+           <div class="fav-status">
+             <span>已收藏于：{lastFolderName || "默认收藏夹"}</span>
+             <button class="fav-unfav" onclick={doUnfavourite} disabled={favBusy}>取消收藏</button>
+           </div>
+         {/if}
+         <button class="fav-item fav-default" onclick={() => doFavourite("", "默认收藏夹")} disabled={favBusy}>
+           <span class="fav-name">默认收藏夹</span>
+         </button>
+         {#if favFolders && favFolders.length > 0}
+           <div class="fav-list">
+             {#each favFolders as f}
+               <button class="fav-item" onclick={() => doFavourite(String(f.id), String(f.name ?? ""))} disabled={favBusy}>
+                 <span class="fav-name">{f.name}</span>
+                 <span class="fav-count">{f.count ?? 0}</span>
+               </button>
+             {/each}
+           </div>
+         {/if}
+         <div class="fav-new">
+           <input class="fav-input" type="text" placeholder="新收藏夹名称" bind:value={newFolderName} onkeydown={(e) => { if (e.key === "Enter") doCreateFavouriteFolder(); }} />
+           <button class="fav-new-btn" onclick={doCreateFavouriteFolder} disabled={newFolderBusy || !newFolderName.trim()}>
+             {newFolderBusy ? "..." : "新建并收藏"}
+           </button>
+         </div>
+       </div>
+     </div>
+   </div>
+ {/if}
+
   {#if loading}
     <div class="status">加载中...</div>
   {:else if error}
@@ -556,6 +680,9 @@
       <div class="post-actions">
         <button class="action-btn" class:liked={post?.is_award_link === 1} onclick={handleLikePost}>
           {post?.is_award_link === 1 ? "已赞" : "点赞"} {post?.link_award_num ?? 0}
+        </button>
+        <button class="action-btn" class:faved={localFaved} onclick={openFavPanel} disabled={favBusy}>
+          {localFaved ? "已收藏" : "收藏"}
         </button>
         <span class="meta">{post.comment_num ?? 0} 评论</span>
       </div>
@@ -1600,5 +1727,112 @@
   .ai-back-btn:hover {
     background: rgba(255, 255, 255, 0.1);
     color: var(--text);
+  }
+  .action-btn.faved {
+    background: var(--accent);
+    color: white;
+  }
+  .fav-panel {
+    max-width: 480px;
+  }
+  .fav-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .fav-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(255, 107, 53, 0.08);
+    border: 0.5px solid rgba(255, 107, 53, 0.2);
+    font-size: 13px;
+    margin-bottom: 4px;
+  }
+  .fav-unfav {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    background: rgba(248, 113, 113, 0.12);
+    border: 0.5px solid rgba(248, 113, 113, 0.3);
+    color: #f87171;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .fav-unfav:hover:not(:disabled) {
+    background: rgba(248, 113, 113, 0.2);
+  }
+  .fav-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 11px 14px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 0.5px solid var(--glass-border);
+    font-size: 13px;
+    transition: all var(--duration-fast) var(--ease-out);
+    text-align: left;
+  }
+  .fav-item:hover:not(:disabled) {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+  .fav-item:disabled {
+    opacity: 0.5;
+  }
+  .fav-default {
+    background: rgba(255, 107, 53, 0.1);
+    border-color: rgba(255, 107, 53, 0.25);
+    font-weight: 500;
+  }
+  .fav-name {
+    flex: 1;
+  }
+  .fav-count {
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+  .fav-item:hover:not(:disabled) .fav-count {
+    color: rgba(255, 255, 255, 0.8);
+  }
+  .fav-new {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+    padding-top: 10px;
+    border-top: 0.5px solid var(--glass-border);
+  }
+  .fav-input {
+    flex: 1;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 0.5px solid var(--glass-border);
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .fav-input:focus {
+    border-color: var(--accent);
+    background: rgba(255, 255, 255, 0.1);
+  }
+  .fav-new-btn {
+    padding: 8px 14px;
+    border-radius: 10px;
+    background: var(--accent);
+    border: 0.5px solid var(--accent);
+    color: white;
+    font-size: 13px;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .fav-new-btn:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+  .fav-new-btn:disabled {
+    opacity: 0.4;
   }
 </style>

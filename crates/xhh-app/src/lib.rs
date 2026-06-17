@@ -10,6 +10,9 @@ use tauri::{Manager, WebviewWindow};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    tracing_subscriber::fmt()
+        .with_env_filter("xhh_core=info,xhh_app=info,info")
+        .init();
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(AppState::try_load())
@@ -102,6 +105,7 @@ pub fn run() {
             // favourites
             commands::favour_folders,
             commands::favour_folder,
+            commands::create_favourite_folder,
             // follow / user
             commands::follow_user,
             commands::unfollow_user,

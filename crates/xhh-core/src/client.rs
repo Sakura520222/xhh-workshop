@@ -139,7 +139,7 @@ impl XhhClient {
 
         if let Some(body) = body {
             let body_str = encode_form(body);
-            tracing::debug!(path = %path, body_keys = ?body.keys().collect::<Vec<_>>(), "POST body");
+            tracing::debug!(path = %path, body = %body_str, "POST 请求体");
             req = req
                 .header(
                     reqwest::header::CONTENT_TYPE,

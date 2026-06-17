@@ -202,3 +202,43 @@ export function setWindowEffectAttr(effect: WindowEffect) {
     localStorage.setItem(WINDOW_EFFECT_STORAGE_KEY, effect);
   } catch { /* ignore */ }
 }
+
+// 收藏状态持久化（localStorage，记录本机收藏过的帖子用于还原"已收藏"态）
+const FAV_STORAGE_KEY = "xhh_fav_state";
+
+export interface FavEntry {
+  folderId: string;
+  folderName: string;
+}
+
+function loadPersistedFav(): Record<string, FavEntry> {
+  try {
+    const raw = localStorage.getItem(FAV_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return {};
+}
+
+let _favState = $state<Record<string, FavEntry>>(loadPersistedFav());
+
+function persistFav() {
+  try {
+    localStorage.setItem(FAV_STORAGE_KEY, JSON.stringify(_favState));
+  } catch { /* ignore */ }
+}
+
+export function getFavState(linkId: string): FavEntry | undefined {
+  return _favState[linkId];
+}
+
+export function setFavState(linkId: string, entry: FavEntry) {
+  _favState[linkId] = entry;
+  persistFav();
+}
+
+export function clearFavState(linkId: string) {
+  if (_favState[linkId]) {
+    delete _favState[linkId];
+    persistFav();
+  }
+}

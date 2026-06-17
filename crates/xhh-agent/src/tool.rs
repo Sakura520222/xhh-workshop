@@ -694,13 +694,13 @@ impl Tool for FavouriteTool {
         } else {
             Some(folder_id)
         };
-        api_inter::toggle_favourite(client, link_id, folder)
+        api_inter::favourite(client, link_id, folder)
             .await
             .map_err(|e| Error::ToolCall {
                 tool: self.name().into(),
                 msg: e.to_string(),
             })?;
-        Ok(json!({"ok": true, "message": "收藏切换成功"}).to_string())
+        Ok(json!({"ok": true, "message": "收藏成功"}).to_string())
     }
 }
 

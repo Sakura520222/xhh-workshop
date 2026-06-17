@@ -2,7 +2,7 @@
 //!
 //!
 //! 帖子点赞为**显式操作**（award_type=1 点赞 / 0 取消），调用方需根据 `is_award_link` 判断状态。
-//! 评论点赞、收藏为**切换式**（toggle），调用方无需判断状态。
+//! 评论点赞为**切换式**（toggle）；收藏为**显式操作**（favour_type=2 收藏 / 1 取消），字段 link_id + userid + folder_id。
 
 use std::collections::BTreeMap;
 
@@ -39,19 +39,45 @@ pub async fn toggle_like_comment(client: &XhhClient, comment_id: &str) -> Result
     client.post(PATH_LIKE_COMMENT, &body, 0).await
 }
 
-/// 收藏 / 取消收藏（toggle）
+/// 收藏帖子（favour_type=1）
 ///
-/// `folder_id` 为 None 时使用默认收藏夹。
-pub async fn toggle_favourite(
+/// `folder_id` 为 None 或空时收藏到默认收藏夹。
+pub async fn favourite(
     client: &XhhClient,
     link_id: &str,
     folder_id: Option<&str>,
 ) -> Result<Value> {
-    tracing::info!(link_id = %link_id, folder_id = ?folder_id, "收藏切换");
-    let folder = folder_id.unwrap_or("");
+    favourite_link(client, link_id, 1, folder_id).await
+}
+
+/// 取消收藏（favour_type=2）
+///
+/// `folder_id` 指定从哪个收藏夹取消。
+pub async fn unfavourite(
+    client: &XhhClient,
+    link_id: &str,
+    folder_id: Option<&str>,
+) -> Result<Value> {
+    favourite_link(client, link_id, 2, folder_id).await
+}
+
+/// 收藏/取消收藏底层（favour_type: 1=收藏, 2=取消；字段名来自 Web 端实测验证）
+async fn favourite_link(
+    client: &XhhClient,
+    link_id: &str,
+    favour_type: i64,
+    folder_id: Option<&str>,
+) -> Result<Value> {
     let mut body = BTreeMap::new();
+    body.insert("favour_type".into(), favour_type.to_string());
     body.insert("link_id".into(), link_id.into());
-    body.insert("fav_folder_id".into(), folder.into());
+    body.insert("userid".into(), client.heybox_id.clone());
+    if let Some(fid) = folder_id {
+        if !fid.is_empty() {
+            body.insert("folder_id".into(), fid.into());
+        }
+    }
+    tracing::info!(%link_id, favour_type, folder_id = ?folder_id, body = ?body, ">>> favour 请求");
     client.post(PATH_FAVOUR, &body, 0).await
 }
 

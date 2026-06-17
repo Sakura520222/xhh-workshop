@@ -374,17 +374,21 @@ pub async fn like_comment(
         .map_err(|e| e.to_string())
 }
 
-/// 收藏（toggle）
+/// 收藏 / 取消收藏（favour_type: 2=收藏, 1=取消）
 #[tauri::command]
 pub async fn favourite(
     state: State<'_, AppState>,
     link_id: String,
     folder_id: Option<String>,
+    favour_type: Option<i64>,
 ) -> Result<serde_json::Value, String> {
     let c = state.require_client().await?;
-    api_inter::toggle_favourite(&c, &link_id, folder_id.as_deref())
-        .await
-        .map_err(|e| e.to_string())
+    let result = if favour_type.unwrap_or(1) == 2 {
+        api_inter::unfavourite(&c, &link_id, folder_id.as_deref()).await
+    } else {
+        api_inter::favourite(&c, &link_id, folder_id.as_deref()).await
+    };
+    result.map_err(|e| e.to_string())
 }
 
 // ─── Search / User ───────────────────────────────────────
@@ -2481,6 +2485,18 @@ pub async fn favour_folder(
     )
     .await
     .map_err(|e| e.to_string())
+}
+
+/// 创建收藏夹
+#[tauri::command]
+pub async fn create_favourite_folder(
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<serde_json::Value, String> {
+    let c = state.require_client().await?;
+    api_inter::create_favourite_folder(&c, &name)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 // ─── Follow / User ────────────────────────────────────────

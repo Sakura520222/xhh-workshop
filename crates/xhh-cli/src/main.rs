@@ -370,9 +370,9 @@ async fn run(cli: Cli) -> Result<()> {
 
         Cmd::Favour { link_id, folder_id } => {
             let c = build_client(&cfg_path)?;
-            let v = api_inter::toggle_favourite(&c, &link_id, folder_id.as_deref()).await?;
+            let v = api_inter::favourite(&c, &link_id, folder_id.as_deref()).await?;
             println!(
-                "收藏切换: {}",
+                "收藏: {}",
                 v.get("status").and_then(|s| s.as_str()).unwrap_or("?")
             );
         }

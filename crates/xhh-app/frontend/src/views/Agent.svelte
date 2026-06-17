@@ -65,6 +65,9 @@
   let pendingConfirmation = $state<AgentToolConfirmationRequest | null>(null);
   let pendingMessage = $state("");
   let approvedConfirmations = $state<AgentToolConfirmationDecision[]>([]);
+  let autoApprove = $state(false);
+  // 自动审批时暂存的确认请求：onConfirmation 收到后不弹框，等旧流报错清理后再自动批准
+  let autoApproveQueued = $state<AgentToolConfirmationRequest | null>(null);
   let scrollEl: HTMLElement | null = $state(null);
   let cancelConfirmationButton: HTMLButtonElement | null = $state(null);
   let messageInput: HTMLTextAreaElement | null = $state(null);
@@ -85,6 +88,20 @@
   let templateToast = $state("");
 
   const TEMPLATES_COLLAPSED_KEY = "xhh_agent_templates_collapsed";
+  const AUTO_APPROVE_KEY = "xhh_agent_auto_approve";
+
+  function loadAutoApprove(): boolean {
+    try {
+      return localStorage.getItem(AUTO_APPROVE_KEY) === "1";
+    } catch { return false; }
+  }
+  function saveAutoApprove(v: boolean) {
+    try { localStorage.setItem(AUTO_APPROVE_KEY, v ? "1" : "0"); } catch { /* ignore */ }
+  }
+  function toggleAutoApprove() {
+    autoApprove = !autoApprove;
+    saveAutoApprove(autoApprove);
+  }
 
   function loadTemplatesCollapsed() {
     try {
@@ -455,6 +472,7 @@
         pendingMessage = "";
         pendingConfirmation = null;
         approvedConfirmations = [];
+        autoApproveQueued = null;
         resetDeletePreview();
         scrollBottom();
         persist();
@@ -462,24 +480,43 @@
       },
       (err) => {
         const aiIdx = messages.length - 1;
-        if (pendingConfirmation && err.includes("危险操作等待确认")) {
+        const isConfirmationWait = err.includes("危险操作等待确认");
+        if (isConfirmationWait && (pendingConfirmation || autoApproveQueued)) {
+          if (autoApproveQueued) {
+            // 自动审批：旧流已清理监听，此处安全地续发批准并重新发起流
+            const req = autoApproveQueued;
+            autoApproveQueued = null;
+            submitConfirmation(req, true);
+            return;
+          }
+          // 手动确认：隐藏思考气泡，等待用户操作
           const current = messages[aiIdx];
           if (current?.text.trim()) {
             messages[aiIdx] = { ...current, streaming: false };
           } else {
             messages.pop();
           }
-        } else {
-          messages[aiIdx] = { role: "assistant", text: err, error: true, streaming: false };
+          busy = false;
+          scrollBottom();
+          persist();
+          return;
         }
+        messages[aiIdx] = { role: "assistant", text: err, error: true, streaming: false };
         busy = false;
+        autoApproveQueued = null;
+        pendingConfirmation = null;
         scrollBottom();
         persist();
-        if (!pendingConfirmation) focusMessageInput();
+        focusMessageInput();
       },
       (req) => {
-        pendingConfirmation = req;
         pendingMessage = text;
+        if (autoApprove) {
+          // 自动审批：暂存请求，不弹框；待旧流报错清理后续发批准
+          autoApproveQueued = req;
+          return;
+        }
+        pendingConfirmation = req;
         void loadDeletePreview(req);
         setTimeout(() => cancelConfirmationButton?.focus(), 0);
       },
@@ -495,6 +532,7 @@
     pendingConfirmation = null;
     pendingMessage = "";
     approvedConfirmations = [];
+    autoApproveQueued = null;
     operationNotice = "";
     resetDeletePreview();
     messages.push({ role: "user", text });
@@ -506,17 +544,19 @@
     startAgentStream(text);
   }
 
-  function approveDangerousTool() {
-    if (!pendingConfirmation || !pendingMessage || busy || deletePreviewLoading || deletePreviewUnavailable()) return;
-    const req = pendingConfirmation;
-    operationNotice = "";
+  function submitConfirmation(req: AgentToolConfirmationRequest, approved: boolean) {
     pendingConfirmation = null;
     resetDeletePreview();
     busy = true;
-    const decision = {
+    if (approved) {
+      operationNotice = "";
+    } else {
+      showOperationNotice(`已取消：${req.summary}`);
+    }
+    const decision: AgentToolConfirmationDecision = {
       tool_name: req.tool_name,
       arguments_json: req.arguments_json,
-      approved: true,
+      approved,
     };
     approvedConfirmations = [...approvedConfirmations, decision];
     const lastIdx = messages.length - 1;
@@ -530,29 +570,14 @@
     startAgentStream(pendingMessage, approvedConfirmations);
   }
 
+  function approveDangerousTool() {
+    if (!pendingConfirmation || !pendingMessage || busy || deletePreviewLoading || deletePreviewUnavailable()) return;
+    submitConfirmation(pendingConfirmation, true);
+  }
+
   function denyDangerousTool() {
     if (!pendingConfirmation || busy) return;
-    const req = pendingConfirmation;
-    const message = pendingMessage;
-    const decision = {
-      tool_name: req.tool_name,
-      arguments_json: req.arguments_json,
-      approved: false,
-    };
-    pendingConfirmation = null;
-    resetDeletePreview();
-    busy = true;
-    approvedConfirmations = [...approvedConfirmations, decision];
-    showOperationNotice(`已取消：${req.summary}`);
-    const lastIdx = messages.length - 1;
-    const lastMessage = messages[lastIdx];
-    if (lastMessage?.role === "assistant" && !lastMessage.error) {
-      messages[lastIdx] = { ...lastMessage, streaming: true };
-    } else {
-      messages.push({ role: "assistant", text: "", streaming: true });
-    }
-    scrollBottom();
-    startAgentStream(message, approvedConfirmations);
+    submitConfirmation(pendingConfirmation, false);
   }
 
   async function reset() {
@@ -595,6 +620,7 @@
   onMount(async () => {
     preloadEmoji();
     templatesCollapsed = loadTemplatesCollapsed();
+    autoApprove = loadAutoApprove();
     try {
       const [sessionList, tplList] = await Promise.all([agentSessionList(), agentTemplateList()]);
       sessions = sessionList;
@@ -660,9 +686,24 @@
           <span class="operation-notice" aria-live="polite">{operationNotice}</span>
         {/if}
       </div>
-      <div class="status-pill" class:busy={busy}>
-        <span></span>
-        {busy ? "执行中" : "待命"}
+      <div class="toolbar-controls">
+        <button
+          type="button"
+          class="auto-approve-toggle"
+          class:on={autoApprove}
+          onclick={toggleAutoApprove}
+          aria-pressed={autoApprove}
+          title={autoApprove
+            ? "自动审批已开启：工具调用将自动执行，不再逐次确认"
+            : "开启自动审批：跳过工具调用确认"}
+        >
+          <span class="auto-approve-dot" aria-hidden="true"></span>
+          自动审批{autoApprove ? "：开" : "：关"}
+        </button>
+        <div class="status-pill" class:busy={busy}>
+          <span></span>
+          {busy ? "执行中" : "待命"}
+        </div>
       </div>
     </div>
 
@@ -1018,6 +1059,58 @@
     margin: 0;
     border-radius: 50%;
     background: currentColor;
+  }
+
+  .toolbar-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .auto-approve-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+    padding: 0 12px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.1);
+    color: var(--text-secondary);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    font-size: 12px;
+    font-weight: 750;
+    cursor: pointer;
+    transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out);
+  }
+
+  .auto-approve-toggle:hover {
+    color: var(--text-strong);
+    border-color: rgba(148, 163, 184, 0.3);
+  }
+
+  .auto-approve-toggle:focus-visible {
+    outline: 3px solid rgba(251, 191, 36, 0.55);
+    outline-offset: 2px;
+  }
+
+  .auto-approve-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: rgba(148, 163, 184, 0.5);
+    transition: background var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
+  }
+
+  .auto-approve-toggle.on {
+    background: rgba(251, 191, 36, 0.16);
+    color: #fcd34d;
+    border-color: rgba(251, 191, 36, 0.4);
+  }
+
+  .auto-approve-toggle.on .auto-approve-dot {
+    background: #fbbf24;
+    box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.22);
   }
 
   .chat-area {

@@ -7,7 +7,12 @@ import {
 } from "@tauri-apps/plugin-notification";
 import { getView } from "./stores.svelte";
 import { toastInfo } from "./toast.svelte";
-import { renderEmojiText } from "./render.svelte";
+import {
+  firstEmojiImageUrl,
+  preloadEmoji,
+  renderEmojiPlainText,
+  renderEmojiText,
+} from "./render.svelte";
 
 const POLL_INTERVAL = 60_000; // 60s
 const TOAST_FETCH_LIMIT = 5; // 每次拉取最新条数用于检测新消息
@@ -22,6 +27,7 @@ let _timer: ReturnType<typeof setInterval> | null = null;
 let _seenIds = new Set<string>();
 let _inited = false;
 let _nativePermissionRequested = false;
+let _emojiReady: Promise<void> | null = null;
 
 export function getUnread() {
   return _unread;
@@ -68,6 +74,11 @@ function plainMessageText(value: unknown): string {
   return (el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 180);
 }
 
+function ensureNotificationEmoji() {
+  _emojiReady ??= preloadEmoji();
+  return _emojiReady;
+}
+
 async function ensureNativePermission(): Promise<boolean> {
   try {
     if (await isPermissionGranted()) return true;
@@ -79,10 +90,11 @@ async function ensureNativePermission(): Promise<boolean> {
   }
 }
 
-async function notifyNative(title: string, body: string) {
+async function notifyNative(title: string, body: string, icon?: string | null) {
   try {
     if (!(await ensureNativePermission())) return;
-    sendNotification({ title, body: body || "点击查看通知" });
+    const options = { title, body: body || "点击查看通知", ...(icon ? { icon } : {}) };
+    sendNotification(options);
   } catch { /* ignore */ }
 }
 
@@ -100,13 +112,18 @@ async function checkNewMessages() {
     if (fresh.length === 0) return;
     for (const m of fresh) _seenIds.add(String(m.message_id));
     persistSeen();
+    await ensureNotificationEmoji();
     const first = fresh[0];
     const name = first?.user_a?.username ?? "有人";
     if (fresh.length === 1) {
       const raw = first?.comment_a_text ?? first?.link_title ?? "";
       const title = `${name} ${msgLabel(first.message_type)}`;
       toastInfo(title, renderEmojiText(raw));
-      await notifyNative(title, plainMessageText(raw));
+      await notifyNative(
+        title,
+        plainMessageText(renderEmojiPlainText(raw)),
+        firstEmojiImageUrl(`${title} ${raw}`),
+      );
     } else {
       toastInfo(`你有 ${fresh.length} 条新通知`, "点击查看");
       await notifyNative("黑盒工坊", `你有 ${fresh.length} 条新通知`);
@@ -130,6 +147,7 @@ export function startPolling() {
     loadSeen();
     _inited = true;
   }
+  void ensureNotificationEmoji();
   if (_running) return;
   _running = true;
   pollOnce();

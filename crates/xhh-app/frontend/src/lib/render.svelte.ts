@@ -345,6 +345,11 @@ function renderEmoji(text: string): string {
   });
 }
 
+function emojiImageUrl(code: string): string | null {
+  const key = code.replace(/^[a-zA-Z]+_/, "");
+  return _emojiMap.get(key) ?? null;
+}
+
 // ─── Public API ─────────────────────────────────────────
 
 export function renderTextSync(text: string): string {
@@ -367,4 +372,21 @@ export function renderEmojiText(text: string): string {
   });
   text = escapeHtml(text);
   return text.replace(/\x00EM(\d+)\x00/g, (_, idx) => emojis[Number(idx)]);
+}
+
+export function firstEmojiImageUrl(text: string): string | null {
+  if (!text) return null;
+  const match = text.match(/\[([a-zA-Z]+_[^\]]+)\]/);
+  return match ? emojiImageUrl(match[1]) : null;
+}
+
+export function renderEmojiPlainText(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/\[([a-zA-Z]+_[^\]]+)\]/g, (full, code: string) => {
+      return emojiImageUrl(code) ? "[表情]" : full;
+    })
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180);
 }

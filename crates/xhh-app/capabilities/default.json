@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "默认权限：允许窗口操作和 shell 插件",
+  "description": "默认权限：允许窗口操作、shell 插件和系统通知",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -10,6 +10,7 @@
     "core:window:allow-unmaximize",
     "core:window:allow-close",
     "core:window:allow-is-maximized",
-    "shell:allow-open"
+    "shell:allow-open",
+    "notification:default"
   ]
 }

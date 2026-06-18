@@ -24,6 +24,7 @@ xhh-agent = { workspace = true }
 tauri = { workspace = true, features = [] }
 rfd = "0.15"
 tauri-plugin-shell = { workspace = true }
+tauri-plugin-notification = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

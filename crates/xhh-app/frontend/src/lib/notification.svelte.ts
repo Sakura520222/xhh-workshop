@@ -1,5 +1,10 @@
 // 通知轮询服务：未读红点 + 新消息提示
 import { notifications, notificationUnreadCount, type NotificationUnreadCount } from "./api";
+import {
+  isPermissionGranted,
+  requestPermission,
+  sendNotification,
+} from "@tauri-apps/plugin-notification";
 import { getView } from "./stores.svelte";
 import { toastInfo } from "./toast.svelte";
 import { renderEmojiText } from "./render.svelte";
@@ -16,6 +21,7 @@ let _running = false;
 let _timer: ReturnType<typeof setInterval> | null = null;
 let _seenIds = new Set<string>();
 let _inited = false;
+let _nativePermissionRequested = false;
 
 export function getUnread() {
   return _unread;
@@ -54,6 +60,32 @@ function msgLabel(type: number): string {
   }
 }
 
+function plainMessageText(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const el = document.createElement("div");
+  el.innerHTML = raw;
+  return (el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 180);
+}
+
+async function ensureNativePermission(): Promise<boolean> {
+  try {
+    if (await isPermissionGranted()) return true;
+    if (_nativePermissionRequested) return false;
+    _nativePermissionRequested = true;
+    return (await requestPermission()) === "granted";
+  } catch {
+    return false;
+  }
+}
+
+async function notifyNative(title: string, body: string) {
+  try {
+    if (!(await ensureNativePermission())) return;
+    sendNotification({ title, body: body || "点击查看通知" });
+  } catch { /* ignore */ }
+}
+
 // 拉取最新消息并提示新增（按 message_id 去重）
 async function checkNewMessages() {
   // 处于通知页时不弹提示，避免与列表内容重复
@@ -72,9 +104,12 @@ async function checkNewMessages() {
     const name = first?.user_a?.username ?? "有人";
     if (fresh.length === 1) {
       const raw = first?.comment_a_text ?? first?.link_title ?? "";
-      toastInfo(`${name} ${msgLabel(first.message_type)}`, renderEmojiText(raw));
+      const title = `${name} ${msgLabel(first.message_type)}`;
+      toastInfo(title, renderEmojiText(raw));
+      await notifyNative(title, plainMessageText(raw));
     } else {
       toastInfo(`你有 ${fresh.length} 条新通知`, "点击查看");
+      await notifyNative("黑盒工坊", `你有 ${fresh.length} 条新通知`);
     }
   } catch { /* 静默失败，不打断轮询 */ }
 }

@@ -15,6 +15,7 @@ pub fn run() {
         .init();
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(AppState::try_load())
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {

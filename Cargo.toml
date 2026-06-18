@@ -53,6 +53,7 @@ utoipa-swagger-ui = { version = "9", features = ["axum"] }
 tauri = { version = "2" }
 tauri-build = { version = "2" }
 tauri-plugin-shell = "2"
+tauri-plugin-notification = "2"
 window-vibrancy = "0.5"
 # Crypto / encoding
 md-5 = "0.10"

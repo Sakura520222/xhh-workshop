@@ -17,6 +17,7 @@ import {
 const POLL_INTERVAL = 60_000; // 60s
 const TOAST_FETCH_LIMIT = 5; // 每次拉取最新条数用于检测新消息
 const SEEN_STORAGE_KEY = "xhh_seen_msg_ids";
+const READ_BASELINE_KEY = "xhh_read_baseline";
 const SEEN_MAX = 500; // 已读 id 上限，防止无限增长
 
 // 未读状态
@@ -56,6 +57,23 @@ function persistSeen() {
     localStorage.setItem(SEEN_STORAGE_KEY, JSON.stringify(arr));
   } catch { /* ignore */ }
 }
+
+function loadReadBaseline() {
+  try {
+    const raw = localStorage.getItem(READ_BASELINE_KEY);
+    _readBaseline = raw != null && raw !== "" ? Number(raw) || null : null;
+  } catch { /* ignore */ }
+}
+
+function persistReadBaseline() {
+  try {
+    if (_readBaseline !== null) localStorage.setItem(READ_BASELINE_KEY, String(_readBaseline));
+    else localStorage.removeItem(READ_BASELINE_KEY);
+  } catch { /* ignore */ }
+}
+
+// 模块加载即恢复已读基线，刷新/重进后仍生效
+loadReadBaseline();
 
 function msgLabel(type: number): string {
   switch (type) {
@@ -165,7 +183,10 @@ export function stopPolling() {
 function applyServerUnread(total: number) {
   if (_readBaseline !== null) {
     _unread = total > _readBaseline ? total - _readBaseline : 0;
-    if (total < _readBaseline) _readBaseline = total;
+    if (total < _readBaseline) {
+      _readBaseline = total;
+      persistReadBaseline();
+    }
   } else {
     _unread = total;
   }
@@ -204,4 +225,5 @@ export async function markAllRead() {
     _readBaseline = _unread;
   }
   _unread = 0;
+  persistReadBaseline();
 }

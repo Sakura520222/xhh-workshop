@@ -7,6 +7,11 @@
 
   let messages = $state<any[]>([]);
   let loading = $state(true);
+  const READ_TS_KEY = "xhh_read_ts";
+  let readTs = $state<number>(Number(localStorage.getItem(READ_TS_KEY)) || 0);
+  function persistReadTs() {
+    try { localStorage.setItem(READ_TS_KEY, String(readTs)); } catch { /* ignore */ }
+  }
   let error = $state("");
   let offset = $state(0);
   let emojiVer = $derived(getEmojiVersion());
@@ -82,8 +87,12 @@
 
   async function handleMarkAllRead() {
     if (messages.length === 0) return;
+    readTs = messages.reduce(
+      (max, msg) => Math.max(max, Number(msg.timestamp) || 0),
+      readTs,
+    );
+    persistReadTs();
     await markAllRead();
-    messages = messages.map((m) => ({ ...m, state: 1 }));
   }
 
   function loadMore() {
@@ -157,7 +166,7 @@
       {#each messages as msg}
         <div
           class="msg-item"
-          class:unread={msg.state === 0}
+          class:unread={msg.state === 0 && Number(msg.timestamp) > readTs}
           role="button"
           tabindex="0"
           onclick={() => openPost(msg.linkid)}

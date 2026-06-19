@@ -417,20 +417,23 @@ pub async fn post_create_video(
     state: State<'_, AppState>,
     title: String,
     video_url: String,
+    video_thumb: String,
     content: Option<String>,
     community_topic_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let c = state.require_client().await?;
-    let (topic_ids, link_tag) = match community_topic_id {
-        Some(t) if !t.is_empty() => (vec![t], 27i64),
-        _ => (vec!["58144".into()], 28i64),
+    // 视频帖 link_tag 固定 1；未选社区时默认盒友杂谈 7214
+    let topic_ids = match community_topic_id {
+        Some(t) if !t.is_empty() => vec![t],
+        _ => vec!["7214".into()],
     };
     let req = api_post::CreateVideoPostReq {
         title,
         video_url,
+        video_thumb,
         content,
         topic_ids,
-        link_tag,
+        link_tag: 1,
     };
     api_post::create_video_post(&c, req)
         .await

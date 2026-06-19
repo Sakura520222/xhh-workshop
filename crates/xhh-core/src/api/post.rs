@@ -31,9 +31,6 @@ pub enum ContentBlock {
         #[serde(skip_serializing_if = "Option::is_none")]
         height: Option<String>,
     },
-    /// 视频块
-    #[serde(rename = "video")]
-    Video { url: String },
 }
 
 /// 把 `Vec<ContentBlock>` 或纯字符串 → JSON 字符串（用于 body.text 字段）
@@ -124,11 +121,15 @@ pub struct DraftReq {
 }
 
 /// 视频帖请求
+///
+/// `video-link/post` 用独立 body 字段（video_url / video_thumb）而非 text 富文本块。
 #[derive(Debug, Clone)]
 pub struct CreateVideoPostReq {
     pub title: String,
     pub video_url: String,
-    /// 附加文字（可选）
+    /// 封面图 URL（body 的 video_thumb 字段）
+    pub video_thumb: String,
+    /// 描述（body 的 text 字段，可选）
     pub content: Option<String>,
     pub topic_ids: Vec<String>,
     pub link_tag: i64,
@@ -198,28 +199,19 @@ pub async fn delete_post(client: &XhhClient, link_id: &str) -> Result<Value> {
 /// 发视频帖
 pub async fn create_video_post(client: &XhhClient, req: CreateVideoPostReq) -> Result<Value> {
     tracing::info!(title = %req.title, video_url = %req.video_url, "发视频帖");
-    let mut blocks: Vec<ContentBlock> = Vec::new();
-    if let Some(text) = req.content {
-        if !text.is_empty() {
-            blocks.push(ContentBlock::Text { text });
-        }
-    }
-    blocks.push(ContentBlock::Video { url: req.video_url });
-
-    let text_json = serde_json::to_string(&blocks)?;
-
     let mut body = BTreeMap::new();
-    body.insert("text".into(), text_json);
+    body.insert("text".into(), req.content.unwrap_or_default());
     body.insert("title".into(), req.title);
-    body.insert("desc".into(), "".into());
-    body.insert("post_type".into(), "2".into());
+    body.insert("post_type".into(), "4".into());
     body.insert("view_limit".into(), "1".into());
     body.insert("link_tag".into(), req.link_tag.to_string());
-    body.insert("post_card_ids".into(), "".into());
-    body.insert("topic_ids".into(), req.topic_ids.join(","));
+    body.insert("video_url".into(), req.video_url);
     body.insert("original".into(), "1".into());
     body.insert("declaration".into(), "1".into());
+    body.insert("video_cos_provider".into(), "tencent".into());
     body.insert("extra_declaration".into(), "0".into());
+    body.insert("topic_ids".into(), req.topic_ids.join(","));
+    body.insert("video_thumb".into(), req.video_thumb);
     client.post(PATH_VIDEO_POST, &body, 1).await
 }
 

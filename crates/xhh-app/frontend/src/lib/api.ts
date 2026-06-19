@@ -429,10 +429,11 @@ export const postDraft = (title: string, content: string, communityTopicId?: str
 export const postCreateVideo = (
   title: string,
   videoUrl: string,
+  videoThumb: string,
   content?: string,
   communityTopicId?: string,
 ): Promise<any> =>
-  invoke("post_create_video", { title, videoUrl, content, communityTopicId });
+  invoke("post_create_video", { title, videoUrl, videoThumb, content, communityTopicId });
 
 // Search — 发现 / 欢迎页 / 推荐话题
 export const searchFound = (): Promise<any> => invoke("search_found");

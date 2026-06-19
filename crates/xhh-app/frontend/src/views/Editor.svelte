@@ -11,6 +11,7 @@
     topicIndex,
   } from "../lib/api";
   import { setView, getEditTarget, clearEditTarget } from "../lib/stores.svelte";
+  import { toastSuccess, toastError } from "../lib/toast.svelte";
 
   // 编辑模式：从详情页携带帖子数据进入，存在则走编辑流程
   // 组件创建时快照一次（编辑目标在本次会话不变），editTarget 仅用于切换标题/按钮态
@@ -21,8 +22,6 @@
   let images = $state<{ url: string; width: number; height: number }[]>(initialEdit?.images ?? []);
   let busy = $state(false);
   let uploading = $state(false);
-  let result = $state("");
-  let error = $state("");
   // 图文 / 视频帖模式（编辑模式固定为图文）
   let mode = $state<"article" | "video">("article");
   let videoUrl = $state("");
@@ -99,12 +98,11 @@
   async function pickImage() {
     if (uploading) return;
     uploading = true;
-    error = "";
     try {
       const r = await uploadImage();
       images = [...images, r];
     } catch (e) {
-      error = "图片上传失败: " + String(e);
+      toastError("图片上传失败", String(e));
     } finally {
       uploading = false;
     }
@@ -114,14 +112,26 @@
   async function pickVideo() {
     if (uploadingVideo) return;
     uploadingVideo = true;
-    error = "";
     try {
       const r = await uploadVideo();
       if (r?.url) videoUrl = r.url;
     } catch (e) {
-      error = "视频上传失败: " + String(e);
+      toastError("视频上传失败", String(e));
     } finally {
       uploadingVideo = false;
+    }
+  }
+
+  let cover = $state<{ url: string; width: number; height: number } | null>(null);
+  async function pickCover() {
+    if (uploading) return;
+    uploading = true;
+    try {
+      cover = await uploadImage();
+    } catch (e) {
+      toastError("封面上传失败", String(e));
+    } finally {
+      uploading = false;
     }
   }
 
@@ -136,31 +146,39 @@
     selectedCommunity = null;
     selectedHashtags = [];
     videoUrl = "";
+    cover = null;
   }
 
   async function submit() {
     if (busy) return;
     if (mode === "video") {
-      if (!title.trim() || !videoUrl.trim()) return;
+      if (title.trim().length < 6) {
+        toastError("标题太短", "视频帖标题不得少于 6 个字");
+        return;
+      }
+      if (!videoUrl.trim()) return;
+      if (!cover) {
+        toastError("请添加封面", "视频投稿需要封面图");
+        return;
+      }
       busy = true;
-      error = "";
-      result = "";
       try {
         const resp = await postCreateVideo(
           title,
           videoUrl,
+          cover.url,
           content.trim() || undefined,
           selectedCommunity?.id ?? undefined,
         );
         if (resp?.status === "ok") {
-          result = "视频帖发布成功";
+          toastSuccess("视频帖发布成功");
           resetForm();
           mode = "article";
         } else {
-          error = resp?.msg ?? "发布失败";
+          toastError("发布失败", resp?.msg ?? "");
         }
       } catch (e) {
-        error = String(e);
+        toastError("发布失败", String(e));
       } finally {
         busy = false;
       }
@@ -169,8 +187,6 @@
 
     if (!title.trim() || !content.trim()) return;
     busy = true;
-    error = "";
-    result = "";
     try {
       const resp = editTarget
         ? await postEdit(
@@ -189,17 +205,17 @@
             images.length > 0 ? images : undefined,
           );
       if (resp?.status === "ok") {
-        result = editTarget ? "编辑成功" : "发帖成功";
+        toastSuccess(editTarget ? "编辑成功" : "发帖成功");
         if (editTarget) {
           clearEditTarget();
           editTarget = null;
         }
         resetForm();
       } else {
-        error = resp?.msg ?? (editTarget ? "编辑失败" : "发帖失败");
+        toastError(editTarget ? "编辑失败" : "发帖失败", resp?.msg ?? "");
       }
     } catch (e) {
-      error = String(e);
+      toastError("操作失败", String(e));
     } finally {
       busy = false;
     }
@@ -208,17 +224,15 @@
   async function saveDraft() {
     if (busy || (!title.trim() && !content.trim())) return;
     busy = true;
-    error = "";
-    result = "";
     try {
       const resp = await postDraft(title, content, selectedCommunity?.id ?? undefined);
       if (resp?.status === "ok") {
-        result = "草稿已保存";
+        toastSuccess("草稿已保存");
       } else {
-        error = resp?.msg ?? "保存草稿失败";
+        toastError("保存草稿失败", resp?.msg ?? "");
       }
     } catch (e) {
-      error = String(e);
+      toastError("保存草稿失败", String(e));
     } finally {
       busy = false;
     }
@@ -243,7 +257,7 @@
       <span class="eyebrow">{editTarget ? "Editing" : "Content Studio"}</span>
       <h1>{editTarget ? "编辑内容" : "发布新内容"}</h1>
     </div>
-    <button class="publish-top" onclick={submit} disabled={busy || (mode === "video" ? (!title.trim() || !videoUrl.trim()) : (!title.trim() || !content.trim()))}>
+    <button class="publish-top" onclick={submit} disabled={busy || (mode === "video" ? (title.trim().length < 6 || !videoUrl.trim() || !cover) : (!title.trim() || !content.trim()))}>
       {busy ? "处理中" : (editTarget ? "保存修改" : "发布")}
     </button>
   </div>
@@ -264,6 +278,15 @@
         <button class="tool-btn" type="button" onclick={pickVideo} disabled={uploadingVideo}>
           {uploadingVideo ? "上传中" : "选择本地视频"}
         </button>
+        <label class="field-label">封面（必填）</label>
+        <div class="cover-row">
+          {#if cover}
+            <img src={cover.url} alt="封面" class="cover-preview" />
+          {/if}
+          <button class="tool-btn" type="button" onclick={pickCover} disabled={uploading}>
+            {uploading ? "上传中" : "选择封面"}
+          </button>
+        </div>
         <label class="field-label" for="post-content">附加文字（可选）</label>
         <textarea id="post-content" bind:value={content} placeholder="为视频补充说明..." class="content-input" rows="6"></textarea>
       {:else}
@@ -301,12 +324,6 @@
         <span class="draft-hint">{mode === "video" ? `${videoUrl.length} 字地址` : `${title.length} 字标题 · ${content.length} 字正文`}</span>
       </div>
 
-      {#if error}
-        <div class="msg error" role="alert">{error}</div>
-      {/if}
-      {#if result}
-        <div class="msg success" role="status">{result}</div>
-      {/if}
     </form>
 
     <aside class="side-panel" aria-label="发布设置">
@@ -397,7 +414,7 @@
           <li class:done={!!content.trim()}>正文已填写</li>
           <li class:done={!!selectedCommunity || selectedHashtags.length > 0}>社区或标签已设置</li>
         </ul>
-        <button class="submit-btn" type="button" onclick={submit} disabled={busy || (mode === "video" ? (!title.trim() || !videoUrl.trim()) : (!title.trim() || !content.trim()))}>
+        <button class="submit-btn" type="button" onclick={submit} disabled={busy || (mode === "video" ? (title.trim().length < 6 || !videoUrl.trim() || !cover) : (!title.trim() || !content.trim()))}>
           {busy ? "处理中" : (editTarget ? "保存修改" : "确认发布")}
         </button>
       </section>
@@ -780,23 +797,18 @@
     width: 100%;
   }
 
-  .msg {
-    padding: 12px 14px;
-    border-radius: 14px;
-    font-size: 13px;
-    line-height: 1.5;
+  .cover-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
   }
 
-  .msg.error {
-    background: var(--danger-soft);
-    color: var(--danger-fg);
-    border: 1px solid rgba(248, 113, 113, 0.22);
-  }
-
-  .msg.success {
-    background: var(--success-soft);
-    color: var(--success-fg);
-    border: 1px solid rgba(34, 197, 94, 0.22);
+  .cover-preview {
+    width: 120px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
   }
 
   @media (max-width: 980px) {

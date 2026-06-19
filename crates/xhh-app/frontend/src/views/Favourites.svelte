@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { favourFolders, favourFolder } from "../lib/api";
+  import { favourFolders, favourFolder, deleteFavouriteFolder } from "../lib/api";
   import { setSelectedLinkId, setView } from "../lib/stores.svelte";
+  import { renderEmojiText } from "../lib/render.svelte";
 
   let folders = $state<any[]>([]);
   let loading = $state(true);
@@ -153,6 +154,26 @@
     postsHasMore = true;
   }
 
+  let deleteTarget = $state<any>(null);
+  let deleting = $state(false);
+  async function doDelete() {
+    if (!deleteTarget || deleting) return;
+    deleting = true;
+    try {
+      const resp = await deleteFavouriteFolder(String(deleteTarget.id));
+      if (resp?.status === "ok") {
+        folders = folders.filter((f) => f.id !== deleteTarget.id);
+        deleteTarget = null;
+      } else {
+        error = resp?.msg ?? "删除失败";
+      }
+    } catch (e) {
+      error = String(e);
+    } finally {
+      deleting = false;
+    }
+  }
+
   function fmtTime(ts: any): string {
     const n = Number(ts);
     if (!n) return "";
@@ -192,13 +213,24 @@
     {:else}
       <div class="folder-list">
         {#each folders as f}
-          <button class="folder-item" onclick={() => openFolder(f)}>
-            <div class="folder-info">
-              <div class="folder-name">{f.name}</div>
-              <div class="folder-count">{f.count ?? 0} 条</div>
-            </div>
+          <div
+            class="folder-item"
+            role="button"
+            tabindex="0"
+            onclick={() => openFolder(f)}
+            onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openFolder(f); } }}
+          >
+            <div class="folder-name">{f.name}</div>
+            <div class="folder-count">{f.count ?? 0} 条</div>
+            <button class="folder-del" type="button" aria-label="删除收藏夹" title="删除收藏夹" onclick={(e) => { e.stopPropagation(); deleteTarget = f; }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 6h18"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+                <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </button>
             <span class="arrow">&rarr;</span>
-          </button>
+          </div>
         {/each}
       </div>
     {/if}
@@ -217,7 +249,7 @@
             onclick={() => openPost(p.linkid)}
             onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPost(p.linkid); } }}
           >
-            <div class="post-title">{p.title || "(无标题)"}</div>
+            <div class="post-title">{@html renderEmojiText(p.title || "(无标题)")}</div>
             <div class="post-footer">
               <div class="post-meta">
                 {#if p.user?.username}
@@ -257,7 +289,7 @@
             onclick={() => openPost(p.linkid)}
             onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPost(p.linkid); } }}
           >
-            <div class="post-title">{p.title || "(无标题)"}</div>
+            <div class="post-title">{@html renderEmojiText(p.title || "(无标题)")}</div>
             <div class="post-footer">
               <div class="post-meta">
                 {#if p.user?.username}
@@ -282,6 +314,20 @@
         {/if}
       </div>
     {/if}
+  {/if}
+
+  {#if deleteTarget}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="confirm-overlay" onclick={() => { if (!deleting) deleteTarget = null; }}>
+      <div class="confirm-panel" onclick={(e) => e.stopPropagation()}>
+        <div class="confirm-text">确认删除收藏夹「{deleteTarget.name}」？</div>
+        <div class="confirm-actions">
+          <button class="confirm-cancel" onclick={() => (deleteTarget = null)} disabled={deleting}>取消</button>
+          <button class="confirm-ok" onclick={doDelete} disabled={deleting}>{deleting ? "删除中" : "删除"}</button>
+        </div>
+      </div>
+    </div>
   {/if}
 </div>
 
@@ -375,6 +421,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    text-align: left;
+    cursor: pointer;
     padding: 16px 18px;
     border-radius: var(--radius);
     background: var(--glass-bg);
@@ -386,18 +434,87 @@
     background: var(--glass-hover);
     border-color: rgba(255, 255, 255, 0.12);
   }
-  .folder-info {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
   .folder-name {
+    flex: 1;
+    min-width: 0;
     font-size: 15px;
     font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .folder-count {
+    flex-shrink: 0;
+    margin-left: 12px;
     font-size: 13px;
     color: var(--text-secondary);
+    white-space: nowrap;
+  }
+  .folder-del {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    margin-left: 8px;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    color: var(--text-secondary);
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .folder-del:hover {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+  .confirm-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--scrim);
+    z-index: 9998;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .confirm-panel {
+    width: 100%;
+    max-width: 360px;
+    padding: 22px;
+    border-radius: var(--radius);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 0.5px solid var(--glass-border);
+    box-shadow: var(--elevation-1);
+  }
+  .confirm-text {
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--text);
+  }
+  .confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 18px;
+  }
+  .confirm-cancel,
+  .confirm-ok {
+    padding: 8px 18px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .confirm-cancel {
+    background: var(--fill-strong);
+    color: var(--text-secondary);
+  }
+  .confirm-ok {
+    background: var(--danger);
+    color: #fff;
+  }
+  .confirm-cancel:disabled,
+  .confirm-ok:disabled {
+    opacity: 0.5;
   }
   .arrow {
     font-size: 16px;
@@ -431,6 +548,12 @@
     -webkit-line-clamp: 2;
     line-clamp: 2;
     -webkit-box-orient: vertical;
+  }
+  .post-title :global(.emoji) {
+    width: 1em;
+    height: 1em;
+    vertical-align: middle;
+    display: inline-block;
   }
   .post-footer {
     display: flex;

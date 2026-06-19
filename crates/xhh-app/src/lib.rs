@@ -120,6 +120,7 @@ pub fn run() {
             commands::favour_folders,
             commands::favour_folder,
             commands::create_favourite_folder,
+            commands::delete_favourite_folder,
             // follow / user
             commands::follow_user,
             commands::unfollow_user,

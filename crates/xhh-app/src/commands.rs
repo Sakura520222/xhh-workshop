@@ -2744,6 +2744,18 @@ pub async fn create_favourite_folder(
         .map_err(|e| e.to_string())
 }
 
+/// 删除收藏夹
+#[tauri::command]
+pub async fn delete_favourite_folder(
+    state: State<'_, AppState>,
+    folder_id: String,
+) -> Result<serde_json::Value, String> {
+    let c = state.require_client().await?;
+    api_inter::delete_favourite_folder(&c, &folder_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 // ─── Follow / User ────────────────────────────────────────
 
 /// 关注用户

@@ -130,6 +130,9 @@ export const favourite = (link_id: string, folder_id: string | undefined, favour
 export const createFavouriteFolder = (name: string): Promise<any> =>
   invoke("create_favourite_folder", { name });
 
+export const deleteFavouriteFolder = (folderId: string): Promise<any> =>
+  invoke("delete_favourite_folder", { folderId });
+
 // Search
 export const search = (req: SearchReq): Promise<any> => invoke("search", { req });
 

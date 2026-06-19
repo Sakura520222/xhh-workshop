@@ -55,6 +55,9 @@ pub fn run() {
             commands::post_create,
             commands::post_edit,
             commands::post_draft,
+            commands::draft_list,
+            commands::delete_draft,
+            commands::edit_info,
             commands::post_create_video,
             commands::post_delete,
             // comment

@@ -57,16 +57,23 @@
   let welcome = $state<any>(null);
   let newsPosts = $state<any[]>([]);
   async function loadDiscovery() {
+    // 搜索发现（热搜词）
     try {
-      const [found, w] = await Promise.all([searchFound(), searchWelcomePage()]);
+      const found = await searchFound();
       const list = found?.result?.search_found?.list ?? [];
       hotWords = list
         .filter((x: any) => x?.name)
         .slice(0, 16)
         .map((x: any) => ({ name: String(x.name) }));
+    } catch (e) {
+      console.warn("[search] searchFound failed:", e);
+    }
+    // 搜索欢迎页
+    try {
+      const w = await searchWelcomePage();
       welcome = w?.result ?? null;
-    } catch {
-      // 失败静默
+    } catch (e) {
+      console.warn("[search] searchWelcomePage failed:", e);
     }
     // 社区头条：盒友杂谈 7214，从 topic/menu 取头条分类的 cate_id
     try {
@@ -121,6 +128,23 @@
         {/each}
       </div>
     </div>
+  {/if}
+
+  {#if !searched && welcome?.Lists?.length}
+    {#each welcome.Lists as lst}
+      {#if (lst?.list ?? []).length > 0}
+        <div class="discovery">
+          <div class="discovery-head">{lst?.title ?? "推荐"}</div>
+          <div class="hot-words">
+            {#each lst.list as item}
+              {#if item?.name}
+                <button class="hot-word" onclick={() => searchWord(item.name)}>{item.name}</button>
+              {/if}
+            {/each}
+          </div>
+        </div>
+      {/if}
+    {/each}
   {/if}
 
   {#if !searched && newsPosts.length > 0}

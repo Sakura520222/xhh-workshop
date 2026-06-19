@@ -4,6 +4,9 @@
     postEdit,
     postDraft,
     postCreateVideo,
+    editInfo,
+    draftList,
+    deleteDraft,
     uploadImage,
     uploadVideo,
     searchTopic as searchHashtagApi,
@@ -221,6 +224,10 @@
     }
   }
 
+  let drafts = $state<any[]>([]);
+  let draftsOpen = $state(false);
+  let draftsLoading = $state(false);
+
   async function saveDraft() {
     if (busy || (!title.trim() && !content.trim())) return;
     busy = true;
@@ -238,6 +245,72 @@
     }
   }
 
+  async function openDraftsBox() {
+    draftsOpen = true;
+    draftsLoading = true;
+    try {
+      const v = await draftList(0, 40);
+      drafts = v?.result?.links ?? [];
+    } catch (e) {
+      toastError("加载草稿箱失败", String(e));
+      drafts = [];
+    } finally {
+      draftsLoading = false;
+    }
+  }
+
+  function parseBlocks(raw: any): any[] {
+    if (typeof raw !== "string" || !raw) return [];
+    try {
+      const a = JSON.parse(raw);
+      return Array.isArray(a) ? a : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async function restoreDraftByLinkid(id: string) {
+    busy = true;
+    try {
+      const p = await editInfo(id);
+      const link = p?.result?.link;
+      if (!link) {
+        toastError("恢复草稿失败", "草稿内容为空");
+        return;
+      }
+      title = link.title ?? "";
+      const blocks = parseBlocks(link.text);
+      content = blocks
+        .filter((b: any) => b?.type === "text" && b.text)
+        .map((b: any) => b.text)
+        .join("\n\n");
+      images = blocks
+        .filter((b: any) => b?.type === "img")
+        .map((b: any) => ({ url: b.url ?? b.text ?? "", width: Number(b.width) || 0, height: Number(b.height) || 0 }))
+        .filter((b: any) => b.url);
+      mode = "article";
+      draftsOpen = false;
+      toastSuccess("已恢复草稿");
+    } catch (e) {
+      toastError("恢复草稿失败", String(e));
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function deleteDraftFromList(id: string) {
+    try {
+      const resp = await deleteDraft(id);
+      if (resp?.status === "ok") {
+        drafts = drafts.filter((d) => String(d.linkid) !== id);
+      } else {
+        toastError("删除草稿失败", resp?.msg ?? "");
+      }
+    } catch (e) {
+      toastError("删除草稿失败", String(e));
+    }
+  }
+
   function back() {
     if (editTarget) {
       clearEditTarget();
@@ -248,6 +321,43 @@
 </script>
 
 <div class="editor-page">
+  {#if draftsOpen}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="drafts-overlay" onclick={() => (draftsOpen = false)}>
+      <div class="drafts-panel" onclick={(e) => e.stopPropagation()}>
+        <div class="drafts-head">
+          <span>草稿箱</span>
+          <button class="drafts-close" onclick={() => (draftsOpen = false)}>关闭</button>
+        </div>
+        <div class="drafts-body">
+          {#if draftsLoading}
+            <div class="drafts-status">加载中...</div>
+          {:else if drafts.length === 0}
+            <div class="drafts-status">暂无草稿</div>
+          {:else}
+            {#each drafts as d}
+              <div class="draft-item">
+                <button class="draft-main" onclick={() => restoreDraftByLinkid(String(d.linkid))}>
+                  <div class="draft-title">{d.title || "(无标题)"}</div>
+                  {#if d.description}
+                    <div class="draft-desc">{d.description}</div>
+                  {/if}
+                </button>
+                <button class="draft-del" aria-label="删除草稿" onclick={() => deleteDraftFromList(String(d.linkid))}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 6h18"/>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+                    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                  </svg>
+                </button>
+              </div>
+            {/each}
+          {/if}
+        </div>
+      </div>
+    </div>
+  {/if}
   <div class="page-head">
     <button class="back-btn" onclick={back} aria-label="返回主页">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
@@ -264,6 +374,9 @@
 
   <div class="editor-grid">
     <form class="compose-card" onsubmit={(e) => { e.preventDefault(); submit(); }}>
+      {#if !editTarget}
+        <button class="restore-draft" type="button" onclick={openDraftsBox}>草稿箱</button>
+      {/if}
       <div class="mode-tabs" role="tablist" aria-label="内容类型">
         <button type="button" class:active={mode === "article"} onclick={() => (mode = "article")} role="tab" aria-selected={mode === "article"}>图文</button>
         <button type="button" class:active={mode === "video"} onclick={() => (mode = "video")} role="tab" aria-selected={mode === "video"} disabled={!!editTarget}>视频帖</button>
@@ -630,6 +743,116 @@
     gap: 12px;
     flex-wrap: wrap;
     padding-top: 4px;
+  }
+
+  .restore-draft {
+    align-self: flex-start;
+    padding: 6px 14px;
+    border-radius: 12px;
+    background: var(--accent-soft);
+    color: var(--on-accent-soft);
+    border: 1px solid color-mix(in srgb, var(--accent-hover) 18%, transparent);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .restore-draft:hover {
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  .drafts-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--scrim);
+    z-index: 9998;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .drafts-panel {
+    width: 100%;
+    max-width: 480px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--radius);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 0.5px solid var(--glass-border);
+    box-shadow: var(--elevation-1);
+    overflow: hidden;
+  }
+  .drafts-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 18px;
+    font-size: 16px;
+    font-weight: 700;
+    border-bottom: 0.5px solid var(--glass-border);
+  }
+  .drafts-close {
+    padding: 4px 12px;
+    border-radius: 10px;
+    background: var(--fill-strong);
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+  .drafts-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+  .drafts-status {
+    text-align: center;
+    padding: 40px 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+  .draft-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    border-radius: 14px;
+    transition: background var(--duration-fast) var(--ease-out);
+  }
+  .draft-item:hover {
+    background: var(--fill);
+  }
+  .draft-main {
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+  }
+  .draft-title {
+    font-size: 14px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .draft-desc {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .draft-del {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    color: var(--text-secondary);
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .draft-del:hover {
+    background: var(--danger-soft);
+    color: var(--danger);
   }
 
   .mode-tabs {

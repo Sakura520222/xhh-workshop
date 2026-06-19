@@ -429,6 +429,15 @@ export const postEdit = (
 export const postDraft = (title: string, content: string, communityTopicId?: string): Promise<any> =>
   invoke("post_draft", { title, content, communityTopicId });
 
+export const draftList = (offset?: number, limit?: number): Promise<any> =>
+  invoke("draft_list", { offset: offset ?? 0, limit: limit ?? 40 });
+
+export const deleteDraft = (linkId: string): Promise<any> =>
+  invoke("delete_draft", { linkId });
+
+export const editInfo = (linkId: string): Promise<any> =>
+  invoke("edit_info", { linkId });
+
 export const postCreateVideo = (
   title: string,
   videoUrl: string,

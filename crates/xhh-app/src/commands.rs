@@ -411,6 +411,43 @@ pub async fn post_draft(
     api_post::save_draft(&c, req).await.map_err(|e| e.to_string())
 }
 
+/// 草稿箱列表
+#[tauri::command]
+pub async fn draft_list(
+    state: State<'_, AppState>,
+    offset: Option<u32>,
+    limit: Option<u32>,
+) -> Result<serde_json::Value, String> {
+    let c = state.require_client().await?;
+    api_post::list_drafts(&c, offset.unwrap_or(0), limit.unwrap_or(40))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 删除草稿
+#[tauri::command]
+pub async fn delete_draft(
+    state: State<'_, AppState>,
+    link_id: String,
+) -> Result<serde_json::Value, String> {
+    let c = state.require_client().await?;
+    api_post::delete_draft(&c, &link_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 获取帖子/草稿可编辑详情
+#[tauri::command]
+pub async fn edit_info(
+    state: State<'_, AppState>,
+    link_id: String,
+) -> Result<serde_json::Value, String> {
+    let c = state.require_client().await?;
+    api_post::edit_info(&c, &link_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// 发布视频帖
 #[tauri::command]
 pub async fn post_create_video(

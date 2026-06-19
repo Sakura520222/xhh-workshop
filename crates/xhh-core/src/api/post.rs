@@ -138,6 +138,9 @@ pub struct CreateVideoPostReq {
 const PATH_POST: &str = "/bbs/app/api/link/post";
 const PATH_VIDEO_POST: &str = "/bbs/app/api/video-link/post";
 const PATH_DELETE: &str = "/bbs/app/link/delete";
+const PATH_DRAFTS: &str = "/bbs/app/link/drafts";
+const PATH_CHANGE_STATUS: &str = "/bbs/app/link/change/status";
+const PATH_EDIT_INFO: &str = "/bbs/app/link/edit/info";
 
 /// 发图文帖
 pub async fn create_post(client: &XhhClient, req: CreatePostReq) -> Result<Value> {
@@ -186,6 +189,35 @@ pub async fn save_draft(client: &XhhClient, req: DraftReq) -> Result<Value> {
     );
     body.insert("draft".into(), "1".into());
     client.post(PATH_POST, &body, 1).await
+}
+
+/// 草稿箱列表（§29 未记录，2026-06-19 抓包确认：GET /bbs/app/link/drafts）
+pub async fn list_drafts(client: &XhhClient, offset: u32, limit: u32) -> Result<Value> {
+    tracing::debug!(offset = offset, limit = limit, "获取草稿箱");
+    client
+        .get(
+            PATH_DRAFTS,
+            &[
+                ("offset", &offset.to_string()),
+                ("limit", &limit.to_string()),
+                ("no_more", "false"),
+            ],
+        )
+        .await
+}
+
+/// 删除草稿（change/status status=0，2026-06-19 抓包确认）
+pub async fn delete_draft(client: &XhhClient, link_id: &str) -> Result<Value> {
+    tracing::info!(link_id = %link_id, "删除草稿");
+    client
+        .get(PATH_CHANGE_STATUS, &[("status", "0"), ("link_id", link_id)])
+        .await
+}
+
+/// 获取帖子/草稿的可编辑详情（编辑、恢复草稿用，2026-06-19 抓包：GET /bbs/app/link/edit/info）
+pub async fn edit_info(client: &XhhClient, link_id: &str) -> Result<Value> {
+    tracing::debug!(link_id = %link_id, "获取编辑详情");
+    client.get(PATH_EDIT_INFO, &[("link_id", link_id)]).await
 }
 
 /// 删帖

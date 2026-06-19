@@ -23,9 +23,7 @@ use crate::error::{Error, Result};
 
 type HmacSha1 = Hmac<Sha1>;
 
-const BUCKET: &str = "imgheybox-1251007209";
 const HOST_CDN: &str = "imgheybox.max-c.com";
-const COS_HOST: &str = "imgheybox-1251007209.cos.ap-shanghai.myqcloud.com";
 
 const PATH_INFO: &str = "/bbs/app/api/qcloud/cos/upload/info/v2";
 const PATH_TOKEN: &str = "/bbs/app/api/qcloud/cos/upload/token/v2";
@@ -109,15 +107,16 @@ pub async fn get_upload_info(client: &XhhClient, file_infos: &[FileInfo]) -> Res
 /// Step 2: 获取上传临时凭证
 pub async fn get_upload_token(
     client: &XhhClient,
+    bucket: &str,
     keys: &[String],
     mimetypes: &[String],
 ) -> Result<UploadTokenResp> {
-    tracing::debug!(keys = ?keys, "上传 Step 2: 获取临时凭证");
+    tracing::debug!(bucket = %bucket, keys = ?keys, "上传 Step 2: 获取临时凭证");
     let keys_json = serde_json::to_string(keys)?;
     let mimetypes_json = serde_json::to_string(mimetypes)?;
 
     let mut body = BTreeMap::new();
-    body.insert("bucket".into(), BUCKET.into());
+    body.insert("bucket".into(), bucket.into());
     body.insert("keys".into(), keys_json);
     body.insert("mimetypes".into(), mimetypes_json);
     body.insert("is_multipart_upload".into(), "0".into());
@@ -139,11 +138,12 @@ pub async fn get_upload_token(
 pub async fn put_to_cos(
     client: &XhhClient,
     creds: &UploadCredentials,
+    cos_host: &str,
     key: &str,
     bytes: &[u8],
     mimetype: &str,
 ) -> Result<()> {
-    tracing::debug!(key = %key, size = bytes.len(), "上传 Step 3: PUT 到 COS");
+    tracing::debug!(cos_host = %cos_host, key = %key, size = bytes.len(), "上传 Step 3: PUT 到 COS");
     let now = chrono::Utc::now().timestamp();
     let exp = now + 600;
     let key_time = format!("{};{}", now, exp);
@@ -157,7 +157,7 @@ pub async fn put_to_cos(
     };
 
     // FormatString: "put\n{key}\n\nhost={cos_host}\n"
-    let format_string = format!("put\n{}\n\nhost={}\n", key, COS_HOST);
+    let format_string = format!("put\n{}\n\nhost={}\n", key, cos_host);
 
     // StringToSign = "sha1\n{KeyTime}\n{SHA1(FormatString)}\n"
     let string_to_sign = format!(
@@ -179,14 +179,14 @@ pub async fn put_to_cos(
         creds.tmp_secret_id, key_time, key_time, signature
     );
 
-    let url = format!("https://{}{}", COS_HOST, key);
+    let url = format!("https://{}{}", cos_host, key);
     let resp = client
         .inner()
         .put(&url)
         .header("Authorization", auth)
         .header("x-cos-security-token", &creds.session_token)
         .header("Content-Type", mimetype)
-        .header("Host", COS_HOST)
+        .header("Host", cos_host)
         .body(bytes.to_vec())
         .send()
         .await?;
@@ -259,6 +259,7 @@ pub async fn upload_image_bytes(
     // Step 2
     let creds_resp = get_upload_token(
         client,
+        &upload_info.bucket,
         std::slice::from_ref(&returned_key),
         &[mimetype.into()],
     )
@@ -266,7 +267,8 @@ pub async fn upload_image_bytes(
     let creds = &creds_resp.credentials;
 
     // Step 3
-    put_to_cos(client, creds, &returned_key, bytes, mimetype).await?;
+    let cos_host = format!("{}.cos.{}.myqcloud.com", upload_info.bucket, upload_info.region);
+    put_to_cos(client, creds, &cos_host, &returned_key, bytes, mimetype).await?;
 
     // Step 4
     let cb = callback(client, std::slice::from_ref(&returned_key)).await?;
@@ -315,12 +317,14 @@ pub async fn upload_video_bytes(
         .clone();
     let creds_resp = get_upload_token(
         client,
+        &upload_info.bucket,
         std::slice::from_ref(&returned_key),
         &[mimetype.into()],
     )
     .await?;
     let creds = &creds_resp.credentials;
-    put_to_cos(client, creds, &returned_key, bytes, mimetype).await?;
+    let cos_host = format!("{}.cos.{}.myqcloud.com", upload_info.bucket, upload_info.region);
+    put_to_cos(client, creds, &cos_host, &returned_key, bytes, mimetype).await?;
     let cb = callback(client, std::slice::from_ref(&returned_key)).await?;
     tracing::debug!(preview_urls = ?cb.preview_urls, "视频上传回调完成");
     let preview_url = cb
@@ -355,9 +359,7 @@ mod tests {
     }
 
     #[test]
-    fn cos_constants_correct() {
-        assert_eq!(BUCKET, "imgheybox-1251007209");
+    fn cos_host_cdn_constant() {
         assert_eq!(HOST_CDN, "imgheybox.max-c.com");
-        assert!(COS_HOST.contains("ap-shanghai"));
     }
 }

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { postDetail, commentCreate, likePost, likeComment, saveImage as saveImageApi, subComments, aiAnalyzeStream, aiCacheGet, aiCacheSave, favourite, favourFolders, createFavouriteFolder, originalImage } from "../lib/api";
+  import { postDetail, postDelete, commentCreate, likePost, likeComment, saveImage as saveImageApi, subComments, aiAnalyzeStream, aiCacheGet, aiCacheSave, favourite, favourFolders, createFavouriteFolder, originalImage } from "../lib/api";
   import type { AiCacheItem } from "../lib/api";
   import { getSelectedLinkId, setView, getPrevView, getFavState, setFavState, clearFavState, getAuth, setEditTarget } from "../lib/stores.svelte";
   import { toastSuccess, toastInfo, toastError } from "../lib/toast.svelte";
@@ -344,6 +344,27 @@
     setView("editor");
   }
 
+  let deleteConfirm = $state(false);
+  let deleting = $state(false);
+  async function doDelete() {
+    if (!post || deleting) return;
+    deleting = true;
+    try {
+      const resp = await postDelete(String(post.linkid ?? linkId ?? ""));
+      if (resp?.status === "ok") {
+        toastSuccess("已删除");
+        deleteConfirm = false;
+        setView(getPrevView() || "home");
+      } else {
+        toastError("删除失败", resp?.msg ?? "");
+      }
+    } catch (e) {
+      toastError("删除失败", String(e));
+    } finally {
+      deleting = false;
+    }
+  }
+
   async function send() {
     const text = commentText.trim();
     if (!text || busy) return;
@@ -632,6 +653,13 @@
           <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>
         </svg>
       </button>
+      <button class="icon-btn delete-btn" aria-label="删除" title="删除帖子" onclick={() => (deleteConfirm = true)}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 6h18"/>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+          <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+        </svg>
+      </button>
     {/if}
   </div>
 
@@ -748,6 +776,19 @@
         </div>
       {/if}
 
+      {#if post?.video_url}
+        <div class="post-video-wrap">
+          <video
+            src={post.video_url}
+            poster={post.video_thumb || undefined}
+            controls
+            preload="metadata"
+            playsinline
+            class="post-video"
+          ></video>
+        </div>
+      {/if}
+
       {#if bodySegments.length > 0}
         <div class="post-content selectable">
           {#each bodySegments as seg}
@@ -791,6 +832,20 @@
         <span class="meta">{post.comment_num ?? 0} 评论</span>
       </div>
     </article>
+
+    {#if deleteConfirm}
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="ai-overlay" onclick={() => { if (!deleting) deleteConfirm = false; }}>
+        <div class="confirm-panel" onclick={(e) => e.stopPropagation()}>
+          <div class="confirm-text">确认删除这篇帖子？删除后无法恢复。</div>
+          <div class="confirm-actions">
+            <button class="confirm-cancel" onclick={() => (deleteConfirm = false)} disabled={deleting}>取消</button>
+            <button class="confirm-ok" onclick={doDelete} disabled={deleting}>{deleting ? "删除中" : "删除"}</button>
+          </div>
+        </div>
+      </div>
+    {/if}
 
     <div class="comments-section">
       <h3 class="section-title">评论</h3>
@@ -1160,6 +1215,64 @@
   }
   .img-wrap:hover .save-img-btn {
     opacity: 1;
+  }
+  .post-video-wrap {
+    margin: 0 0 16px;
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: #000;
+  }
+  .post-video {
+    width: 100%;
+    max-height: 70vh;
+    display: block;
+  }
+  .icon-btn.delete-btn {
+    color: var(--danger);
+  }
+  .icon-btn.delete-btn:hover {
+    background: var(--danger-soft);
+  }
+  .confirm-panel {
+    width: 100%;
+    max-width: 360px;
+    padding: 22px;
+    border-radius: var(--radius);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 0.5px solid var(--glass-border);
+    box-shadow: var(--elevation-1);
+  }
+  .confirm-text {
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--text);
+  }
+  .confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 18px;
+  }
+  .confirm-cancel,
+  .confirm-ok {
+    padding: 8px 18px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .confirm-cancel {
+    background: var(--fill-strong);
+    color: var(--text-secondary);
+  }
+  .confirm-ok {
+    background: var(--danger);
+    color: #fff;
+  }
+  .confirm-cancel:disabled,
+  .confirm-ok:disabled {
+    opacity: 0.5;
   }
   .post-actions {
     display: flex;

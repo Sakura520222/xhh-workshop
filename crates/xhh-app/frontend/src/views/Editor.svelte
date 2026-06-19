@@ -150,6 +150,7 @@
     selectedHashtags = [];
     videoUrl = "";
     cover = null;
+    draftLinkId = null;
   }
 
   async function submit() {
@@ -213,6 +214,13 @@
           clearEditTarget();
           editTarget = null;
         }
+        // 草稿恢复后发布：同步删除原草稿
+        if (draftLinkId) {
+          try {
+            await deleteDraft(draftLinkId);
+          } catch { /* 草稿清理失败不阻塞发帖成功 */ }
+          draftLinkId = null;
+        }
         resetForm();
       } else {
         toastError(editTarget ? "编辑失败" : "发帖失败", resp?.msg ?? "");
@@ -227,6 +235,8 @@
   let drafts = $state<any[]>([]);
   let draftsOpen = $state(false);
   let draftsLoading = $state(false);
+  // 从草稿恢复后发布，需同步删除原草稿
+  let draftLinkId = $state<string | null>(null);
 
   async function saveDraft() {
     if (busy || (!title.trim() && !content.trim())) return;
@@ -278,6 +288,7 @@
         toastError("恢复草稿失败", "草稿内容为空");
         return;
       }
+      draftLinkId = id;
       title = link.title ?? "";
       const blocks = parseBlocks(link.text);
       content = blocks

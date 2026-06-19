@@ -1,18 +1,58 @@
 <script lang="ts">
-  import { postCreate, uploadImage, searchTopic as searchHashtagApi, searchCommunity as searchCommunityApi } from "../lib/api";
-  import { setView } from "../lib/stores.svelte";
+  import {
+    postCreate,
+    postEdit,
+    postDraft,
+    postCreateVideo,
+    uploadImage,
+    uploadVideo,
+    searchTopic as searchHashtagApi,
+    searchCommunity as searchCommunityApi,
+    topicIndex,
+  } from "../lib/api";
+  import { setView, getEditTarget, clearEditTarget } from "../lib/stores.svelte";
 
-  let title = $state("");
-  let content = $state("");
-  let images = $state<{ url: string; width: number; height: number }[]>([]);
+  // 编辑模式：从详情页携带帖子数据进入，存在则走编辑流程
+  // 组件创建时快照一次（编辑目标在本次会话不变），editTarget 仅用于切换标题/按钮态
+  const initialEdit = getEditTarget();
+  let editTarget = $state(initialEdit);
+  let title = $state(initialEdit?.title ?? "");
+  let content = $state(initialEdit?.content ?? "");
+  let images = $state<{ url: string; width: number; height: number }[]>(initialEdit?.images ?? []);
   let busy = $state(false);
   let uploading = $state(false);
   let result = $state("");
   let error = $state("");
+  // 图文 / 视频帖模式（编辑模式固定为图文）
+  let mode = $state<"article" | "video">("article");
+  let videoUrl = $state("");
 
   let communityKeyword = $state("");
   let communityResults = $state<{ id: string; name: string }[]>([]);
-  let selectedCommunity = $state<{ id: string; name: string } | null>(null);
+  let selectedCommunity = $state<{ id: string; name: string } | null>(
+    initialEdit?.communityId ? { id: initialEdit.communityId, name: initialEdit.communityName ?? "" } : null,
+  );
+
+  let hashtagKeyword = $state("");
+  let hashtagResults = $state<{ name: string }[]>([]);
+  let selectedHashtags = $state<string[]>(initialEdit?.hashtags ?? []);
+
+  // 推荐话题 / 社区（首屏预填，点击即填入关联社区）
+  let recommendations = $state<{ topicId?: string; name: string }[]>([]);
+  topicIndex()
+    .then((resp) => {
+      const topicList = resp?.result?.topic_list ?? [];
+      recommendations = topicList
+        .filter((t: any) => t?.name)
+        .slice(0, 8)
+        .map((t: any) => ({
+          topicId: t.topic_id != null ? String(t.topic_id) : undefined,
+          name: String(t.name),
+        }));
+    })
+    .catch(() => {
+      // 推荐失败不阻塞发帖
+    });
 
   async function searchCommunity() {
     if (!communityKeyword.trim()) return;
@@ -31,10 +71,6 @@
     communityResults = [];
     communityKeyword = "";
   }
-
-  let hashtagKeyword = $state("");
-  let hashtagResults = $state<{ name: string }[]>([]);
-  let selectedHashtags = $state<string[]>([]);
 
   async function searchHashtags() {
     if (!hashtagKeyword.trim()) return;
@@ -65,8 +101,8 @@
     uploading = true;
     error = "";
     try {
-      const result = await uploadImage();
-      images = [...images, result];
+      const r = await uploadImage();
+      images = [...images, r];
     } catch (e) {
       error = "图片上传失败: " + String(e);
     } finally {
@@ -74,32 +110,112 @@
     }
   }
 
+  let uploadingVideo = $state(false);
+  async function pickVideo() {
+    if (uploadingVideo) return;
+    uploadingVideo = true;
+    error = "";
+    try {
+      const r = await uploadVideo();
+      if (r?.url) videoUrl = r.url;
+    } catch (e) {
+      error = "视频上传失败: " + String(e);
+    } finally {
+      uploadingVideo = false;
+    }
+  }
+
   function removeImage(index: number) {
     images = images.filter((_, i) => i !== index);
   }
 
+  function resetForm() {
+    title = "";
+    content = "";
+    images = [];
+    selectedCommunity = null;
+    selectedHashtags = [];
+    videoUrl = "";
+  }
+
   async function submit() {
-    if (!title.trim() || !content.trim() || busy) return;
+    if (busy) return;
+    if (mode === "video") {
+      if (!title.trim() || !videoUrl.trim()) return;
+      busy = true;
+      error = "";
+      result = "";
+      try {
+        const resp = await postCreateVideo(
+          title,
+          videoUrl,
+          content.trim() || undefined,
+          selectedCommunity?.id ?? undefined,
+        );
+        if (resp?.status === "ok") {
+          result = "视频帖发布成功";
+          resetForm();
+          mode = "article";
+        } else {
+          error = resp?.msg ?? "发布失败";
+        }
+      } catch (e) {
+        error = String(e);
+      } finally {
+        busy = false;
+      }
+      return;
+    }
+
+    if (!title.trim() || !content.trim()) return;
     busy = true;
     error = "";
     result = "";
     try {
-      const resp = await postCreate(
-        title,
-        content,
-        selectedHashtags,
-        selectedCommunity?.id ?? undefined,
-        images.length > 0 ? images : undefined,
-      );
+      const resp = editTarget
+        ? await postEdit(
+            editTarget.linkId,
+            title,
+            content,
+            selectedHashtags,
+            selectedCommunity?.id ?? undefined,
+            images.length > 0 ? images : undefined,
+          )
+        : await postCreate(
+            title,
+            content,
+            selectedHashtags,
+            selectedCommunity?.id ?? undefined,
+            images.length > 0 ? images : undefined,
+          );
       if (resp?.status === "ok") {
-        result = "发帖成功";
-        title = "";
-        content = "";
-        images = [];
-        selectedCommunity = null;
-        selectedHashtags = [];
+        result = editTarget ? "编辑成功" : "发帖成功";
+        if (editTarget) {
+          clearEditTarget();
+          editTarget = null;
+        }
+        resetForm();
       } else {
-        error = resp?.msg ?? "发帖失败";
+        error = resp?.msg ?? (editTarget ? "编辑失败" : "发帖失败");
+      }
+    } catch (e) {
+      error = String(e);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function saveDraft() {
+    if (busy || (!title.trim() && !content.trim())) return;
+    busy = true;
+    error = "";
+    result = "";
+    try {
+      const resp = await postDraft(title, content, selectedCommunity?.id ?? undefined);
+      if (resp?.status === "ok") {
+        result = "草稿已保存";
+      } else {
+        error = resp?.msg ?? "保存草稿失败";
       }
     } catch (e) {
       error = String(e);
@@ -109,6 +225,10 @@
   }
 
   function back() {
+    if (editTarget) {
+      clearEditTarget();
+      editTarget = null;
+    }
     setView("home");
   }
 </script>
@@ -120,41 +240,65 @@
       返回
     </button>
     <div>
-      <span class="eyebrow">Content Studio</span>
-      <h1>发布新内容</h1>
+      <span class="eyebrow">{editTarget ? "Editing" : "Content Studio"}</span>
+      <h1>{editTarget ? "编辑内容" : "发布新内容"}</h1>
     </div>
-    <button class="publish-top" onclick={submit} disabled={busy || !title.trim() || !content.trim()}>
-      {busy ? "发布中" : "发布"}
+    <button class="publish-top" onclick={submit} disabled={busy || (mode === "video" ? (!title.trim() || !videoUrl.trim()) : (!title.trim() || !content.trim()))}>
+      {busy ? "处理中" : (editTarget ? "保存修改" : "发布")}
     </button>
   </div>
 
   <div class="editor-grid">
     <form class="compose-card" onsubmit={(e) => { e.preventDefault(); submit(); }}>
+      <div class="mode-tabs" role="tablist" aria-label="内容类型">
+        <button type="button" class:active={mode === "article"} onclick={() => (mode = "article")} role="tab" aria-selected={mode === "article"}>图文</button>
+        <button type="button" class:active={mode === "video"} onclick={() => (mode = "video")} role="tab" aria-selected={mode === "video"} disabled={!!editTarget}>视频帖</button>
+      </div>
+
       <label class="field-label" for="post-title">标题</label>
       <input id="post-title" type="text" bind:value={title} placeholder="输入一个清晰、有吸引力的标题" class="title-input" />
 
-      <label class="field-label" for="post-content">正文</label>
-      <textarea id="post-content" bind:value={content} placeholder="分享观点、攻略、体验或社区动态..." class="content-input" rows="12"></textarea>
+      {#if mode === "video"}
+        <label class="field-label" for="post-video">视频地址</label>
+        <input id="post-video" type="text" bind:value={videoUrl} placeholder="粘贴视频文件 URL（mp4 等）" class="video-input" />
+        <button class="tool-btn" type="button" onclick={pickVideo} disabled={uploadingVideo}>
+          {uploadingVideo ? "上传中" : "选择本地视频"}
+        </button>
+        <label class="field-label" for="post-content">附加文字（可选）</label>
+        <textarea id="post-content" bind:value={content} placeholder="为视频补充说明..." class="content-input" rows="6"></textarea>
+      {:else}
+        <label class="field-label" for="post-content">正文</label>
+        <textarea id="post-content" bind:value={content} placeholder="分享观点、攻略、体验或社区动态..." class="content-input" rows="12"></textarea>
 
-      {#if images.length > 0}
-        <div class="image-list" aria-label="已上传图片">
-          {#each images as img, i}
-            <div class="img-item">
-              <img src={img.url} alt={`已上传图片 ${i + 1}`} class="img-thumb" />
-              <button class="remove-btn" type="button" onclick={() => removeImage(i)} aria-label={`移除图片 ${i + 1}`}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-              </button>
-            </div>
-          {/each}
-        </div>
+        {#if images.length > 0}
+          <div class="image-list" aria-label="已上传图片">
+            {#each images as img, i}
+              <div class="img-item">
+                <img src={img.url} alt={`已上传图片 ${i + 1}`} class="img-thumb" />
+                <button class="remove-btn" type="button" onclick={() => removeImage(i)} aria-label={`移除图片 ${i + 1}`}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
+              </div>
+            {/each}
+          </div>
+        {/if}
       {/if}
 
       <div class="compose-actions">
-        <button class="tool-btn" type="button" onclick={pickImage} disabled={uploading}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
-          {uploading ? "上传中" : "添加图片"}
-        </button>
-        <span class="draft-hint">{title.length} 字标题 · {content.length} 字正文</span>
+        {#if mode === "article"}
+          <div class="action-group">
+            <button class="tool-btn" type="button" onclick={pickImage} disabled={uploading}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+              {uploading ? "上传中" : "添加图片"}
+            </button>
+            {#if !editTarget}
+              <button class="tool-btn" type="button" onclick={saveDraft} disabled={busy || (!title.trim() && !content.trim())}>
+                存草稿
+              </button>
+            {/if}
+          </div>
+        {/if}
+        <span class="draft-hint">{mode === "video" ? `${videoUrl.length} 字地址` : `${title.length} 字标题 · ${content.length} 字正文`}</span>
       </div>
 
       {#if error}
@@ -194,6 +338,16 @@
           <div class="results">
             {#each communityResults as c}
               <button class="option" type="button" onclick={() => selectCommunity(c)}>{c.name}</button>
+            {/each}
+          </div>
+        {/if}
+        {#if recommendations.length > 0}
+          <div class="rec-head">推荐社区</div>
+          <div class="results">
+            {#each recommendations as r}
+              {#if r.topicId}
+                <button class="option" type="button" onclick={() => selectCommunity({ id: r.topicId as string, name: r.name })}>{r.name}</button>
+              {/if}
             {/each}
           </div>
         {/if}
@@ -243,8 +397,8 @@
           <li class:done={!!content.trim()}>正文已填写</li>
           <li class:done={!!selectedCommunity || selectedHashtags.length > 0}>社区或标签已设置</li>
         </ul>
-        <button class="submit-btn" type="button" onclick={submit} disabled={busy || !title.trim() || !content.trim()}>
-          {busy ? "发布中" : "确认发布"}
+        <button class="submit-btn" type="button" onclick={submit} disabled={busy || (mode === "video" ? (!title.trim() || !videoUrl.trim()) : (!title.trim() || !content.trim()))}>
+          {busy ? "处理中" : (editTarget ? "保存修改" : "确认发布")}
         </button>
       </section>
     </aside>
@@ -459,6 +613,66 @@
     gap: 12px;
     flex-wrap: wrap;
     padding-top: 4px;
+  }
+
+  .mode-tabs {
+    display: inline-flex;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 14px;
+    background: rgba(148, 163, 184, 0.12);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    align-self: flex-start;
+  }
+
+  .mode-tabs button {
+    min-height: 34px;
+    padding: 0 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+
+  .mode-tabs button.active {
+    background: var(--accent);
+    color: white;
+  }
+
+  .mode-tabs button:disabled {
+    opacity: 0.4;
+  }
+
+  .action-group {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .video-input {
+    width: 100%;
+    padding: 14px 16px;
+    font-size: 15px;
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--bg-soft) 72%, transparent);
+    color: var(--text);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    outline: none;
+    transition: border-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out);
+  }
+
+  .video-input:focus {
+    background: color-mix(in srgb, var(--bg-soft) 90%, transparent);
+    border-color: color-mix(in srgb, var(--accent-hover) 42%, transparent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+
+  .rec-head {
+    margin-top: 14px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
   }
 
   .draft-hint {

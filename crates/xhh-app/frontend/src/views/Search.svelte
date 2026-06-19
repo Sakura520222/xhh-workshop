@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { search, type SearchReq } from "../lib/api";
+  import { search, searchFound, searchWelcomePage, topicMenu, communityFeedsNews, type SearchReq } from "../lib/api";
+  import { setSelectedLinkId, setView } from "../lib/stores.svelte";
   import PostCard from "../components/PostCard.svelte";
 
   type Classified = { kind: "user" | "post" | "topic" | "hashtag" | "game"; info: any };
@@ -50,6 +51,46 @@
   }
 
   let results = $derived(rawItems.map(classify).filter(Boolean) as Classified[]);
+
+  // 搜索发现（热搜词）+ 欢迎页 + 社区头条，首屏加载
+  let hotWords = $state<{ name: string }[]>([]);
+  let welcome = $state<any>(null);
+  let newsPosts = $state<any[]>([]);
+  async function loadDiscovery() {
+    try {
+      const [found, w] = await Promise.all([searchFound(), searchWelcomePage()]);
+      const list = found?.result?.search_found?.list ?? [];
+      hotWords = list
+        .filter((x: any) => x?.name)
+        .slice(0, 16)
+        .map((x: any) => ({ name: String(x.name) }));
+      welcome = w?.result ?? null;
+    } catch {
+      // 失败静默
+    }
+    // 社区头条：盒友杂谈 7214，从 topic/menu 取头条分类的 cate_id
+    try {
+      const menu = await topicMenu(7214);
+      const newsMenu = (menu?.result?.menu ?? []).find((m: any) => m?.type === "news");
+      const cateId = newsMenu?.params?.cate_id;
+      const news = await communityFeedsNews(7214, cateId, 6);
+      newsPosts = (news?.result?.links ?? []).slice(0, 6);
+    } catch {
+      // 失败静默
+    }
+  }
+  void loadDiscovery();
+
+  function searchWord(w: string) {
+    keyword = w;
+    doSearch();
+  }
+
+  function openPost(linkId: string | number) {
+    if (!linkId) return;
+    setSelectedLinkId(String(linkId));
+    setView("detail");
+  }
 </script>
 
 <div class="search-page">
@@ -70,6 +111,28 @@
     </select>
     <button class="btn" onclick={doSearch} disabled={loading}>搜索</button>
   </div>
+
+  {#if !searched && hotWords.length > 0}
+    <div class="discovery">
+      <div class="discovery-head">搜索发现</div>
+      <div class="hot-words">
+        {#each hotWords as w}
+          <button class="hot-word" onclick={() => searchWord(w.name)}>{w.name}</button>
+        {/each}
+      </div>
+    </div>
+  {/if}
+
+  {#if !searched && newsPosts.length > 0}
+    <div class="discovery">
+      <div class="discovery-head">社区头条</div>
+      <div class="results">
+        {#each newsPosts as p}
+          <PostCard post={p} onOpen={() => openPost(p.linkid)} />
+        {/each}
+      </div>
+    </div>
+  {/if}
 
   {#if errorMsg}
     <div class="status error">{errorMsg}</div>
@@ -121,6 +184,33 @@
     display: flex;
     gap: 8px;
     margin-bottom: 20px;
+  }
+  .discovery {
+    margin-bottom: 20px;
+  }
+  .discovery-head {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+  }
+  .hot-words {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .hot-word {
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: var(--fill);
+    color: var(--text);
+    border: 0.5px solid var(--glass-border);
+    font-size: 13px;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .hot-word:hover {
+    background: var(--accent);
+    color: white;
   }
   .input {
     flex: 1;

@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { postDetail, commentCreate, likePost, likeComment, saveImage as saveImageApi, subComments, aiAnalyzeStream, aiCacheGet, aiCacheSave, favourite, favourFolders, createFavouriteFolder } from "../lib/api";
+  import { postDetail, commentCreate, likePost, likeComment, saveImage as saveImageApi, subComments, aiAnalyzeStream, aiCacheGet, aiCacheSave, favourite, favourFolders, createFavouriteFolder, originalImage } from "../lib/api";
   import type { AiCacheItem } from "../lib/api";
-  import { getSelectedLinkId, setView, getPrevView, getFavState, setFavState, clearFavState } from "../lib/stores.svelte";
+  import { getSelectedLinkId, setView, getPrevView, getFavState, setFavState, clearFavState, getAuth, setEditTarget } from "../lib/stores.svelte";
   import { toastSuccess, toastInfo, toastError } from "../lib/toast.svelte";
   import { renderTextSync, renderAiMarkdown, preloadEmoji, getEmojiVersion } from "../lib/render.svelte";
   import { parsePostContent, type ContentSegment } from "../lib/content";
@@ -142,6 +142,29 @@
   function viewerNext() {
     if (viewerIndex < viewerImages.length - 1) { viewerUrl = viewerImages[viewerIndex + 1]; viewerZoom = 1; viewerPanX = 0; viewerPanY = 0; }
   }
+  // 查看原图：经 original/image 取原图地址，在查看器中切换显示
+  async function viewOriginal() {
+    if (!viewerUrl) return;
+    try {
+      const resp = await originalImage(viewerUrl);
+      const orig =
+        resp?.result?.url ??
+        resp?.result?.original_url ??
+        (typeof resp?.result === "string" ? resp.result : null);
+      if (!orig || orig === viewerUrl) {
+        toastInfo("已是原图");
+        return;
+      }
+      const idx = viewerImages.indexOf(viewerUrl);
+      if (idx >= 0) viewerImages[idx] = orig;
+      viewerUrl = orig;
+      viewerZoom = 1;
+      viewerPanX = 0;
+      viewerPanY = 0;
+    } catch (e) {
+      toastError("获取原图失败", String(e));
+    }
+  }
   function handleViewerWheel(e: WheelEvent) {
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.15 : 0.15;
@@ -252,6 +275,73 @@
     } catch (e) {
       console.error(e);
     }
+  }
+
+  let refreshing = $state(false);
+
+  async function forceRefresh() {
+    if (!linkId || refreshing) return;
+    refreshing = true;
+    commentPage = 1;
+    commentHasMore = true;
+    expandedRoots = new Set();
+    try {
+      const p = await postDetail({ link_id: linkId, limit: 20, force: true });
+      post = p?.result?.link ?? null;
+      const treeComments = p?.result?.comments;
+      floors = Array.isArray(treeComments) && treeComments.length > 0 ? treeComments : [];
+      commentHasMore = p?.result?.has_more_floors === 1;
+      toastSuccess("已刷新");
+    } catch (e) {
+      toastError("刷新失败", String(e));
+    } finally {
+      refreshing = false;
+    }
+  }
+
+  let auth = $derived(getAuth());
+  // 仅帖子作者本人可见编辑入口
+  let isOwner = $derived(
+    !!post && !!auth.heybox_id && String(post.userid ?? "") === String(auth.heybox_id),
+  );
+
+  // 解析富文本 JSON 块
+  function safeParseBlocks(raw: any): any[] {
+    if (typeof raw !== "string" || !raw) return [];
+    try {
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr : [];
+    } catch {
+      return [];
+    }
+  }
+
+  // 进入编辑模式：从当前帖子还原标题 / 正文 / 图片 / 标签 / 社区
+  function startEdit() {
+    if (!post) return;
+    const blocks = safeParseBlocks(post.text);
+    const textParts: string[] = [];
+    const imgs: { url: string; width: number; height: number }[] = [];
+    for (const b of blocks) {
+      if (b?.type === "text" && b.text) {
+        textParts.push(b.text);
+      } else if (b?.type === "img") {
+        const url = b.url ?? b.text;
+        if (url) imgs.push({ url, width: Number(b.width) || 0, height: Number(b.height) || 0 });
+      }
+    }
+    const hashtags = (post.hashtags ?? []).map((h: any) => h?.name).filter(Boolean);
+    const firstTopic = post.topics?.[0];
+    setEditTarget({
+      linkId: String(post.linkid ?? linkId ?? ""),
+      title: post.title ?? "",
+      content: textParts.join("\n\n"),
+      hashtags,
+      communityId: firstTopic?.topic_id != null ? String(firstTopic.topic_id) : undefined,
+      communityName: firstTopic?.name,
+      images: imgs.length > 0 ? imgs : undefined,
+    });
+    setView("editor");
   }
 
   async function send() {
@@ -529,6 +619,20 @@
         <path d="M12.5 9.5l.75 1.75L15 12l-1.75.75L12.5 14.5l-.75-1.75L10 12l1.75-.75z"/>
       </svg>
     </button>
+    <button class="icon-btn" aria-label="刷新" title="刷新" onclick={forceRefresh} disabled={refreshing || !post}>
+      <svg class:spinning={refreshing} width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M13.5 8a5.5 5.5 0 1 1-1.61-3.89"/>
+        <path d="M13.5 2.5v3h-3"/>
+      </svg>
+    </button>
+    {#if isOwner}
+      <button class="icon-btn" aria-label="编辑" title="编辑帖子" onclick={startEdit}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 20h9"/>
+          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+        </svg>
+      </button>
+    {/if}
   </div>
 
  {#if aiPanel}
@@ -836,6 +940,7 @@
           <button class="viewer-btn" onclick={viewerPrev}>上一张</button>
         {/if}
         <button class="viewer-btn" onclick={() => saveImage(viewerUrl)}>保存</button>
+        <button class="viewer-btn" onclick={viewOriginal}>原图</button>
         <button class="viewer-btn" onclick={closeViewer}>关闭</button>
         {#if viewerIndex < viewerImages.length - 1}
           <button class="viewer-btn" onclick={viewerNext}>下一张</button>
@@ -1397,11 +1502,38 @@
   .ai-btn:disabled {
     opacity: 0.4;
   }
+  .icon-btn {
+    padding: 6px 8px;
+    border-radius: 12px;
+    background: var(--fill-strong);
+    border: 0.5px solid rgba(255, 255, 255, 0.15);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: all var(--duration-fast) var(--ease-out);
+    box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.2);
+  }
+  .icon-btn:hover:not(:disabled) {
+    background: rgba(255, 107, 53, 0.15);
+    border-color: rgba(255, 107, 53, 0.3);
+    color: var(--accent);
+  }
+  .icon-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .icon-btn svg.spinning {
+    animation: icon-spin 0.8s linear infinite;
+  }
+  @keyframes icon-spin {
+    to { transform: rotate(360deg); }
+  }
  .ai-overlay {
    position: fixed;
    top: 0;
    bottom: 0;
-   left: var(--sidebar-width);
+   left: 0;
    right: 0;
    background: var(--scrim);
    z-index: 9998;

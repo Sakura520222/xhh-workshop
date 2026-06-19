@@ -15,6 +15,7 @@ use std::collections::BTreeMap;
 
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sha1::{Digest as Sha1Digest, Sha1};
 
 use crate::client::XhhClient;
@@ -276,6 +277,57 @@ pub async fn upload_image_bytes(
         .cloned()
         .unwrap_or_else(|| format!("https://{}{}", HOST_CDN, returned_key));
 
+    Ok(UploadResult {
+        preview_url,
+        key: returned_key,
+    })
+}
+
+const PATH_ORIGINAL_IMAGE: &str = "/bbs/app/api/original/image";
+
+/// 获取图片原始 URL（传入压缩/缩略图 URL）
+pub async fn original_image(client: &XhhClient, url: &str) -> Result<Value> {
+    tracing::debug!(url = %url, "获取图片原始 URL");
+    client.get(PATH_ORIGINAL_IMAGE, &[("url", url)]).await
+}
+
+/// 一键上传视频字节（复用 COS 四步流程）
+pub async fn upload_video_bytes(
+    client: &XhhClient,
+    bytes: &[u8],
+    name: &str,
+    mimetype: &str,
+) -> Result<UploadResult> {
+    let fsize = bytes.len() as u64;
+    tracing::info!(name = %name, fsize = fsize, mimetype = %mimetype, "一键上传视频");
+    let info = FileInfo {
+        name: name.into(),
+        mimetype: mimetype.into(),
+        fsize,
+        width: 0,
+        height: 0,
+    };
+    let upload_info = get_upload_info(client, std::slice::from_ref(&info)).await?;
+    let returned_key = upload_info
+        .keys
+        .first()
+        .ok_or_else(|| Error::UploadFailed("no key returned".into()))?
+        .clone();
+    let creds_resp = get_upload_token(
+        client,
+        std::slice::from_ref(&returned_key),
+        &[mimetype.into()],
+    )
+    .await?;
+    let creds = &creds_resp.credentials;
+    put_to_cos(client, creds, &returned_key, bytes, mimetype).await?;
+    let cb = callback(client, std::slice::from_ref(&returned_key)).await?;
+    tracing::debug!(preview_urls = ?cb.preview_urls, "视频上传回调完成");
+    let preview_url = cb
+        .preview_urls
+        .first()
+        .cloned()
+        .unwrap_or_else(|| format!("https://{}{}", HOST_CDN, returned_key));
     Ok(UploadResult {
         preview_url,
         key: returned_key,

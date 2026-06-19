@@ -77,6 +77,7 @@ export interface PostDetailParams {
   limit?: number;
   is_first?: number;
   owner_only?: number;
+  force?: boolean;
 }
 
 export const postDetail = (params: PostDetailParams): Promise<any> =>
@@ -87,6 +88,7 @@ export const postDetail = (params: PostDetailParams): Promise<any> =>
     limit: params.limit,
     isFirst: params.is_first,
     ownerOnly: params.owner_only,
+    force: params.force,
   });
 
 export const communityFeeds = (topic_id: number, limit = 20): Promise<any> =>
@@ -409,3 +411,53 @@ export const cacheSaveConfig = (enabled: boolean, maxBytes: number): Promise<Cac
   invoke("cache_save_config", { enabled, maxBytes });
 export const cacheStats = (): Promise<CacheStats> => invoke("cache_stats");
 export const cacheClear = (): Promise<void> => invoke("cache_clear");
+
+// Post — 编辑 / 草稿 / 视频帖
+export const postEdit = (
+  linkId: string,
+  title: string,
+  content: string,
+  hashtags: string[],
+  communityTopicId?: string,
+  images?: { url: string; width: number; height: number }[],
+): Promise<any> =>
+  invoke("post_edit", { linkId, title, content, hashtags, communityTopicId, images });
+
+export const postDraft = (title: string, content: string, communityTopicId?: string): Promise<any> =>
+  invoke("post_draft", { title, content, communityTopicId });
+
+export const postCreateVideo = (
+  title: string,
+  videoUrl: string,
+  content?: string,
+  communityTopicId?: string,
+): Promise<any> =>
+  invoke("post_create_video", { title, videoUrl, content, communityTopicId });
+
+// Search — 发现 / 欢迎页 / 推荐话题
+export const searchFound = (): Promise<any> => invoke("search_found");
+export const searchWelcomePage = (): Promise<any> => invoke("search_welcome_page");
+export const topicIndex = (): Promise<any> => invoke("topic_index");
+
+// User — 用户信息 / 用户帖子列表
+export const userInfo = (): Promise<any> => invoke("user_info");
+export const userLinkList = (
+  userid?: string,
+  offset?: number,
+  limit?: number,
+): Promise<any> =>
+  invoke("user_link_list", { userid, offset: offset ?? 0, limit: limit ?? 20 });
+
+// Image — 原图 URL
+export const originalImage = (url: string): Promise<any> => invoke("original_image", { url });
+
+// Upload — 视频
+export const uploadVideo = (): Promise<{ url: string }> => invoke("upload_video");
+
+// Community — 社区菜单 / 社区头条
+export const topicMenu = (topicId: number): Promise<any> => invoke("topic_menu", { topicId });
+export const communityFeedsNews = (
+  topicId: number,
+  cateId?: number,
+  limit?: number,
+): Promise<any> => invoke("community_feeds_news", { topicId, cateId, limit });

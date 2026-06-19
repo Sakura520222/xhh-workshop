@@ -49,8 +49,13 @@ pub fn run() {
             commands::feeds_list,
             commands::post_detail,
             commands::community_feeds,
+            commands::topic_menu,
+            commands::community_feeds_news,
             // post
             commands::post_create,
+            commands::post_edit,
+            commands::post_draft,
+            commands::post_create_video,
             commands::post_delete,
             // comment
             commands::comment_create,
@@ -63,7 +68,12 @@ pub fn run() {
             // search / user
             commands::search,
             commands::search_community,
+            commands::search_found,
+            commands::search_welcome_page,
+            commands::topic_index,
             commands::user_profile,
+            commands::user_info,
+            commands::user_link_list,
             // agent
             commands::agent_chat,
             commands::agent_chat_stream,
@@ -97,6 +107,8 @@ pub fn run() {
             // image
             commands::save_image,
             commands::upload_image,
+            commands::upload_video,
+            commands::original_image,
             // topic
             commands::search_topic,
             // emoji

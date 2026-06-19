@@ -199,6 +199,7 @@
         <div class="meta-row">
           <span>Lv{profile?.level_info?.level ?? "?"}</span>
           {#if profile?.ip_location}<span>{profile.ip_location}</span>{/if}
+          <span>ID: {profile?.userid ?? "?"}</span>
         </div>
         {#if profile?.signature}
           <p class="signature">{profile.signature}</p>

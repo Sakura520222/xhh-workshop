@@ -170,6 +170,68 @@ pub async fn community_feeds(
     client.get("/bbs/app/topic/feeds", &extras_ref).await
 }
 
+/// 社区菜单（Tab 结构 + 排序筛选器）
+///
+/// 对应 `GET /bbs/app/topic/menu`（§38）。返回 `menu[].type` 为 `"link"`/`"news"`，
+/// `menu[].params.cate_id` 需合并到社区头条请求。
+pub async fn topic_menu(client: &XhhClient, topic_id: u32) -> Result<Value> {
+    tracing::debug!(topic_id = topic_id, "获取社区菜单");
+    client
+        .get("/bbs/app/topic/menu", &[("topic_id", &topic_id.to_string())])
+        .await
+}
+
+/// 社区头条列表请求参数
+///
+/// 对应 `GET /bbs/app/topic/feeds/news`（§40），响应结构与 [`community_feeds`] 相同。
+#[derive(Debug, Clone, Default)]
+pub struct CommunityNewsQuery {
+    /// 分类 ID（来自 `topic/menu` 的 `params.cate_id`）
+    pub cate_id: Option<u32>,
+    pub limit: Option<u32>,
+    pub offset: Option<u32>,
+    pub lastval: Option<String>,
+    pub sort_filter: Option<String>,
+    pub dw: Option<u32>,
+}
+
+/// 获取社区头条列表（§40）
+pub async fn community_feeds_news(
+    client: &XhhClient,
+    topic_id: u32,
+    q: CommunityNewsQuery,
+) -> Result<Value> {
+    tracing::debug!(topic_id = topic_id, cate_id = ?q.cate_id, "获取社区头条列表");
+    let mut extras: Vec<(String, String)> = vec![("topic_id".into(), topic_id.to_string())];
+    if let Some(c) = q.cate_id {
+        extras.push(("cate_id".into(), c.to_string()));
+    }
+    if let Some(l) = q.limit {
+        extras.push(("limit".into(), l.to_string()));
+    }
+    if let Some(o) = q.offset {
+        extras.push(("offset".into(), o.to_string()));
+    }
+    if let Some(ref lv) = q.lastval {
+        if !lv.is_empty() {
+            extras.push(("lastval".into(), lv.clone()));
+        }
+    }
+    if let Some(ref sf) = q.sort_filter {
+        if !sf.is_empty() {
+            extras.push(("sort_filter".into(), sf.clone()));
+        }
+    }
+    if let Some(d) = q.dw {
+        extras.push(("dw".into(), d.to_string()));
+    }
+    let extras_ref: Vec<(&str, &str)> = extras
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.as_str()))
+        .collect();
+    client.get("/bbs/app/topic/feeds/news", &extras_ref).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

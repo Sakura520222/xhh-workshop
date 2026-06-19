@@ -3,7 +3,7 @@
   import { notifications } from "../lib/api";
  import { setView, setSelectedLinkId, setSelectedUserId } from "../lib/stores.svelte";
  import { renderTextSync, getEmojiVersion, renderEmojiText } from "../lib/render.svelte";
-  import { refreshUnread, markSeen } from "../lib/notification.svelte";
+  import { refreshUnread, markSeen, markAllRead } from "../lib/notification.svelte";
 
   let messages = $state<any[]>([]);
   let loading = $state(true);
@@ -80,6 +80,12 @@
     syncBadge();
   }
 
+  async function handleMarkAllRead() {
+    if (messages.length === 0) return;
+    await markAllRead();
+    messages = messages.map((m) => ({ ...m, state: 1 }));
+  }
+
   function loadMore() {
     if (loadingMore || !hasMore) return;
     loadingMore = true;
@@ -136,6 +142,7 @@
 <div class="notif-page">
   <div class="topbar">
    <span class="topbar-title">通知</span>
+    <button class="read-all-btn" onclick={handleMarkAllRead} disabled={loading || messages.length === 0}>一键已读</button>
     <button class="refresh-btn" onclick={handleRefresh} disabled={loading}>刷新</button>
   </div>
 
@@ -150,6 +157,7 @@
       {#each messages as msg}
         <div
           class="msg-item"
+          class:unread={msg.state === 0}
           role="button"
           tabindex="0"
           onclick={() => openPost(msg.linkid)}
@@ -220,8 +228,8 @@
     font-size: 15px;
     font-weight: 500;
   }
-  .refresh-btn {
-    margin-left: auto;
+  .refresh-btn,
+  .read-all-btn {
     padding: 6px 14px;
     border-radius: 14px;
     background: rgba(255, 255, 255, 0.12);
@@ -231,10 +239,15 @@
     box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.3);
     transition: all var(--duration-fast) var(--ease-out);
   }
-  .refresh-btn:hover:not(:disabled) {
+  .read-all-btn {
+    margin-left: auto;
+  }
+  .refresh-btn:hover:not(:disabled),
+  .read-all-btn:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.2);
   }
-  .refresh-btn:disabled {
+  .refresh-btn:disabled,
+  .read-all-btn:disabled {
     opacity: 0.5;
   }
   .msg-list {
@@ -254,6 +267,9 @@
   .msg-item:hover {
     background: var(--glass-hover);
     border-color: rgba(255, 255, 255, 0.12);
+  }
+  .msg-item.unread {
+    box-shadow: var(--elevation-1), inset 3px 0 0 var(--accent);
   }
   .msg-header {
     display: flex;

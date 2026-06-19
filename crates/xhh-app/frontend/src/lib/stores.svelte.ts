@@ -73,6 +73,30 @@ export function setSelectedUserId(id: string) {
   _selectedUserId = id;
 }
 
+// 编辑模式目标（从详情页携带帖子数据进入编辑器）
+export interface EditTarget {
+  linkId: string;
+  title: string;
+  content: string;
+  hashtags: string[];
+  communityId?: string;
+  communityName?: string;
+  images?: { url: string; width: number; height: number }[];
+}
+let _editTarget = $state<EditTarget | null>(null);
+
+export function getEditTarget() {
+  return _editTarget;
+}
+
+export function setEditTarget(t: EditTarget) {
+  _editTarget = t;
+}
+
+export function clearEditTarget() {
+  _editTarget = null;
+}
+
 // 主页滚动位置记忆（离开前保存，回来时恢复）
 let _homeScrollTop = 0;
 

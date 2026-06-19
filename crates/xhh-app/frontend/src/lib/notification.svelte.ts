@@ -22,6 +22,8 @@ const SEEN_MAX = 500; // 已读 id 上限，防止无限增长
 // 未读状态
 let _unread = $state<number>(0);
 let _detail = $state<NotificationUnreadCount>({ comment: 0, award: 0 });
+// 一键已读基线：标记已读时的服务端未读快照，之后仅当计数增长才重新亮起
+let _readBaseline: number | null = null;
 let _running = false;
 let _timer: ReturnType<typeof setInterval> | null = null;
 let _seenIds = new Set<string>();
@@ -136,7 +138,7 @@ async function pollOnce() {
   try {
     const d = await notificationUnreadCount();
     _detail = d;
-    _unread = (d.comment ?? 0) + (d.award ?? 0);
+    applyServerUnread((d.comment ?? 0) + (d.award ?? 0));
   } catch { /* 未登录或网络异常，保持上次状态 */ }
   // 新消息提示
   await checkNewMessages();
@@ -159,12 +161,22 @@ export function stopPolling() {
   _running = false;
 }
 
+// 未读计数应用：若处于一键已读基线之后，仅显示新增量
+function applyServerUnread(total: number) {
+  if (_readBaseline !== null) {
+    _unread = total > _readBaseline ? total - _readBaseline : 0;
+    if (total < _readBaseline) _readBaseline = total;
+  } else {
+    _unread = total;
+  }
+}
+
 // 立即刷新一次未读（进入通知页/手动刷新时调用）
 export async function refreshUnread() {
   try {
     const d = await notificationUnreadCount();
     _detail = d;
-    _unread = (d.comment ?? 0) + (d.award ?? 0);
+    applyServerUnread((d.comment ?? 0) + (d.award ?? 0));
   } catch { /* ignore */ }
 }
 
@@ -179,4 +191,17 @@ export async function markSeen() {
     }
     persistSeen();
   } catch { /* ignore */ }
+}
+
+// 一键已读：以当前服务端未读为基线本地清零红点（服务端无已读接口，仅本地生效）
+export async function markAllRead() {
+  await markSeen();
+  try {
+    const d = await notificationUnreadCount();
+    _detail = d;
+    _readBaseline = (d.comment ?? 0) + (d.award ?? 0);
+  } catch {
+    _readBaseline = _unread;
+  }
+  _unread = 0;
 }

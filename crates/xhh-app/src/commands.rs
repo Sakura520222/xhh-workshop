@@ -188,8 +188,8 @@ pub async fn feeds_list(
 
 /// 帖子详情（支持楼层分页）
 ///
-/// 仅首屏请求（`is_first == 1`）走本地缓存以加速浏览与离线查看；
-/// 翻页（`is_first == 0`）与不带 `is_first` 的刷新请求透传 API 取最新数据。
+/// 仅首屏请求（`is_first == 1`）命中本地缓存以加速浏览与离线查看；
+/// `force` 为真时跳过缓存读取并回写最新数据（用于手动刷新）。
 #[tauri::command]
 pub async fn post_detail(
     state: State<'_, AppState>,
@@ -199,6 +199,7 @@ pub async fn post_detail(
     limit: Option<u32>,
     is_first: Option<u32>,
     owner_only: Option<u32>,
+    force: Option<bool>,
 ) -> Result<serde_json::Value, String> {
     let query = api_feed::PostDetailQuery {
         page,
@@ -207,24 +208,24 @@ pub async fn post_detail(
         is_first,
         owner_only,
     };
-    if is_first == Some(1) {
-        // 先查缓存：命中则无需登录 / 联网，支持离线查看
+    let forced = force.unwrap_or(false);
+    // 首屏且非强制刷新：命中本地缓存直接返回
+    if is_first == Some(1) && !forced {
         let cm = xhh_core::cache::CacheManager::from_default_config();
         if let Some(v) = cm.get_post(&link_id).unwrap_or(None) {
             return Ok(v);
         }
-        let c = state.require_client().await?;
-        let v = api_feed::post_detail(&c, &link_id, query)
-            .await
-            .map_err(|e| e.to_string())?;
-        let _ = cm.put_post(&link_id, v.clone());
-        Ok(v)
-    } else {
-        let c = state.require_client().await?;
-        api_feed::post_detail(&c, &link_id, query)
-            .await
-            .map_err(|e| e.to_string())
     }
+    let c = state.require_client().await?;
+    let v = api_feed::post_detail(&c, &link_id, query)
+        .await
+        .map_err(|e| e.to_string())?;
+    // 首屏类请求（含强制刷新）回写缓存；楼层翻页不覆盖
+    if is_first == Some(1) || forced {
+        let cm = xhh_core::cache::CacheManager::from_default_config();
+        let _ = cm.put_post(&link_id, v.clone());
+    }
+    Ok(v)
 }
 
 /// 社区帖子列表
@@ -247,26 +248,50 @@ pub async fn community_feeds(
     .map_err(|e| e.to_string())
 }
 
-// ─── Post ────────────────────────────────────────────────
-
-/// 发帖
+/// 社区菜单（Tab 结构 + 排序筛选器）
 #[tauri::command]
-pub async fn post_create(
+pub async fn topic_menu(
     state: State<'_, AppState>,
-    title: String,
-    content: String,
-    hashtags: Vec<String>,
-    community_topic_id: Option<String>,
-    images: Option<Vec<serde_json::Value>>,
+    topic_id: u32,
 ) -> Result<serde_json::Value, String> {
     let c = state.require_client().await?;
-    let (topic_ids, link_tag) = match community_topic_id {
-        Some(t) if !t.is_empty() => (vec![t], 27i64),
-        _ => (vec!["58144".into()], 28i64),
-    };
-    let content_input = match images {
-        Some(ref imgs) if !imgs.is_empty() => {
-            tracing::debug!(images_count = imgs.len(), "发帖带图片");
+    api_feed::topic_menu(&c, topic_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 社区头条列表（cate_id 来自 topic_menu 的 params）
+#[tauri::command]
+pub async fn community_feeds_news(
+    state: State<'_, AppState>,
+    topic_id: u32,
+    cate_id: Option<u32>,
+    limit: Option<u32>,
+) -> Result<serde_json::Value, String> {
+    let c = state.require_client().await?;
+    api_feed::community_feeds_news(
+        &c,
+        topic_id,
+        api_feed::CommunityNewsQuery {
+            cate_id,
+            limit,
+            ..Default::default()
+        },
+    )
+    .await
+    .map_err(|e| e.to_string())
+}
+
+// ─── Post ────────────────────────────────────────────────
+
+/// 把正文 + 可选图片块组装成 ContentInput（发帖 / 编辑共用）
+fn build_post_content(
+    content: String,
+    images: Option<&Vec<serde_json::Value>>,
+) -> api_post::ContentInput {
+    match images {
+        Some(imgs) if !imgs.is_empty() => {
+            tracing::debug!(images_count = imgs.len(), "帖子带图片");
             let mut blocks = vec![api_post::ContentBlock::Text { text: content }];
             for img in imgs {
                 let url = img.get("url").and_then(|v| v.as_str()).unwrap_or("");
@@ -288,10 +313,28 @@ pub async fn post_create(
             api_post::ContentInput::Blocks(blocks)
         }
         _ => {
-            tracing::debug!("发帖纯文本");
+            tracing::debug!("帖子纯文本");
             api_post::ContentInput::Plain(content)
         }
+    }
+}
+
+/// 发帖
+#[tauri::command]
+pub async fn post_create(
+    state: State<'_, AppState>,
+    title: String,
+    content: String,
+    hashtags: Vec<String>,
+    community_topic_id: Option<String>,
+    images: Option<Vec<serde_json::Value>>,
+) -> Result<serde_json::Value, String> {
+    let c = state.require_client().await?;
+    let (topic_ids, link_tag) = match community_topic_id {
+        Some(t) if !t.is_empty() => (vec![t], 27i64),
+        _ => (vec!["58144".into()], 28i64),
     };
+    let content_input = build_post_content(content, images.as_ref());
     let req = api_post::CreatePostReq {
         title,
         content: content_input,
@@ -315,6 +358,81 @@ pub async fn post_delete(
 ) -> Result<serde_json::Value, String> {
     let c = state.require_client().await?;
     api_post::delete_post(&c, &link_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 编辑帖子
+#[tauri::command]
+pub async fn post_edit(
+    state: State<'_, AppState>,
+    link_id: String,
+    title: String,
+    content: String,
+    hashtags: Vec<String>,
+    community_topic_id: Option<String>,
+    images: Option<Vec<serde_json::Value>>,
+) -> Result<serde_json::Value, String> {
+    let c = state.require_client().await?;
+    let (topic_ids, link_tag) = match community_topic_id {
+        Some(t) if !t.is_empty() => (vec![t], 27i64),
+        _ => (vec!["58144".into()], 28i64),
+    };
+    let req = api_post::EditPostReq {
+        link_id,
+        title,
+        content: build_post_content(content, images.as_ref()),
+        topic_ids,
+        hashtags,
+        link_tag,
+    };
+    api_post::edit_post(&c, req).await.map_err(|e| e.to_string())
+}
+
+/// 保存草稿
+#[tauri::command]
+pub async fn post_draft(
+    state: State<'_, AppState>,
+    title: String,
+    content: String,
+    community_topic_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let c = state.require_client().await?;
+    let (topic_ids, link_tag) = match community_topic_id {
+        Some(t) if !t.is_empty() => (vec![t], 27i64),
+        _ => (vec!["58144".into()], 28i64),
+    };
+    let req = api_post::DraftReq {
+        title,
+        content: api_post::ContentInput::Plain(content),
+        topic_ids,
+        link_tag,
+    };
+    api_post::save_draft(&c, req).await.map_err(|e| e.to_string())
+}
+
+/// 发布视频帖
+#[tauri::command]
+pub async fn post_create_video(
+    state: State<'_, AppState>,
+    title: String,
+    video_url: String,
+    content: Option<String>,
+    community_topic_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let c = state.require_client().await?;
+    let (topic_ids, link_tag) = match community_topic_id {
+        Some(t) if !t.is_empty() => (vec![t], 27i64),
+        _ => (vec!["58144".into()], 28i64),
+    };
+    let req = api_post::CreateVideoPostReq {
+        title,
+        video_url,
+        content,
+        topic_ids,
+        link_tag,
+    };
+    api_post::create_video_post(&c, req)
         .await
         .map_err(|e| e.to_string())
 }
@@ -474,6 +592,31 @@ pub async fn search_community(
         .map_err(|e| e.to_string())
 }
 
+/// 搜索发现（热搜词）
+#[tauri::command]
+pub async fn search_found(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let c = state.require_client().await?;
+    api_search::search_found(&c).await.map_err(|e| e.to_string())
+}
+
+/// 搜索欢迎页（推荐位）
+#[tauri::command]
+pub async fn search_welcome_page(
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    let c = state.require_client().await?;
+    api_search::search_welcome_page(&c)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 推荐话题 / 社区
+#[tauri::command]
+pub async fn topic_index(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let c = state.require_client().await?;
+    api_search::topic_index(&c).await.map_err(|e| e.to_string())
+}
+
 /// 用户主页
 #[tauri::command]
 pub async fn user_profile(
@@ -482,6 +625,27 @@ pub async fn user_profile(
 ) -> Result<serde_json::Value, String> {
     let c = state.require_client().await?;
     api_user::user_profile(&c, userid.as_deref())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 当前登录用户信息（轻量）
+#[tauri::command]
+pub async fn user_info(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let c = state.require_client().await?;
+    api_user::user_info(&c).await.map_err(|e| e.to_string())
+}
+
+/// 用户帖子列表
+#[tauri::command]
+pub async fn user_link_list(
+    state: State<'_, AppState>,
+    userid: Option<String>,
+    offset: Option<u32>,
+    limit: Option<u32>,
+) -> Result<serde_json::Value, String> {
+    let c = state.require_client().await?;
+    api_user::user_link_list(&c, userid.as_deref(), offset.unwrap_or(0), limit.unwrap_or(20))
         .await
         .map_err(|e| e.to_string())
 }
@@ -2438,6 +2602,51 @@ pub async fn upload_image(state: State<'_, AppState>) -> Result<serde_json::Valu
         "url": result.preview_url,
         "width": width,
         "height": height,
+    }))
+}
+
+/// 获取图片原始 URL（传入压缩/缩略图 URL，返回原图）
+#[tauri::command]
+pub async fn original_image(
+    state: State<'_, AppState>,
+    url: String,
+) -> Result<serde_json::Value, String> {
+    let c = state.require_client().await?;
+    xhh_core::api::upload::original_image(&c, &url)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 选择本地视频并上传到 COS，返回 CDN URL
+#[tauri::command]
+pub async fn upload_video(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let file = rfd::AsyncFileDialog::new()
+        .add_filter("视频", &["mp4", "mov", "avi", "mkv", "webm", "flv"])
+        .pick_file()
+        .await
+        .ok_or("取消了选择")?;
+
+    let name = file.file_name();
+    let bytes = file.read().await;
+
+    let mimetype = match name.rsplit('.').next() {
+        Some("mp4") => "video/mp4",
+        Some("mov") => "video/quicktime",
+        Some("webm") => "video/webm",
+        Some("avi") => "video/x-msvideo",
+        Some("mkv") => "video/x-matroska",
+        Some("flv") => "video/x-flv",
+        _ => "video/mp4",
+    };
+
+    let c = state.require_client().await?;
+    let result = xhh_core::api::upload::upload_video_bytes(&c, &bytes, &name, mimetype)
+        .await
+        .map_err(|e| e.to_string())?;
+    tracing::debug!(preview_url = %result.preview_url, key = %result.key, "视频上传完成");
+
+    Ok(serde_json::json!({
+        "url": result.preview_url,
     }))
 }
 

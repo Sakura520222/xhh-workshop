@@ -17,6 +17,8 @@ const PATH_FOLLOWER: &str = "/bbs/app/profile/follower/list";
 const PATH_FOLLOW: &str = "/bbs/app/profile/follow/user";
 const PATH_UNFOLLOW: &str = "/bbs/app/profile/follow/user/cancel";
 const PATH_RELATION: &str = "/bbs/app/profile/build/relation/";
+const PATH_USER_INFO: &str = "/bbs/app/api/user/info";
+const PATH_USER_LINK_LIST: &str = "/bbs/app/profile/user/link/list";
 
 /// 用户主页详情
 pub async fn user_profile(client: &XhhClient, userid: Option<&str>) -> Result<Value> {
@@ -74,4 +76,36 @@ pub async fn build_relation(client: &XhhClient, userid: &str, relation_type: i64
     body.insert("userid".into(), userid.into());
     body.insert("relation_type".into(), relation_type.to_string());
     client.post(PATH_RELATION, &body, 0).await
+}
+
+/// 当前登录用户信息
+pub async fn user_info(client: &XhhClient) -> Result<Value> {
+    tracing::debug!("获取当前用户信息");
+    client.get(PATH_USER_INFO, &[]).await
+}
+
+/// 用户帖子列表（§2.10），`userid` 为 None 时默认当前用户
+pub async fn user_link_list(
+    client: &XhhClient,
+    userid: Option<&str>,
+    offset: u32,
+    limit: u32,
+) -> Result<Value> {
+    tracing::debug!(
+        userid = userid.unwrap_or("self"),
+        offset = offset,
+        limit = limit,
+        "获取用户帖子列表"
+    );
+    let userid = userid.unwrap_or(&client.heybox_id);
+    client
+        .get(
+            PATH_USER_LINK_LIST,
+            &[
+                ("userid", userid),
+                ("offset", &offset.to_string()),
+                ("limit", &limit.to_string()),
+            ],
+        )
+        .await
 }

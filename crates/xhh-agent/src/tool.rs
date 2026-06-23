@@ -86,6 +86,11 @@ fn arg_str<'a>(v: &'a Value, key: &str) -> &'a str {
     v.get(key).and_then(|s| s.as_str()).unwrap_or("")
 }
 
+/// 读取 id 参数（兼容数字/字符串，返回 owned String）
+fn arg_id(v: &Value, key: &str) -> String {
+    v.get(key).and_then(id_to_string).unwrap_or_default()
+}
+
 impl ToolRegistry {
     pub fn new() -> Self {
         Self {
@@ -657,11 +662,11 @@ impl Tool for FavouriteTool {
 
     fn confirmation(&self, arguments_json: &str) -> ToolConfirmation {
         let v = parsed_args(arguments_json);
-        let link_id = arg_str(&v, "link_id");
-        let folder_id = arg_str(&v, "folder_id");
+        let link_id = arg_id(&v, "link_id");
+        let folder_id = arg_id(&v, "folder_id");
         let favour_type = v.get("favour_type").and_then(|t| t.as_i64()).unwrap_or(1);
         let action = if favour_type == 2 { "取消收藏" } else { "收藏" };
-        let id_disp = if link_id.is_empty() { "未提供 ID" } else { link_id };
+        let id_disp = if link_id.is_empty() { "未提供 ID".to_string() } else { link_id };
         let target = if folder_id.is_empty() {
             format!("帖子 {}", id_disp)
         } else {
@@ -680,8 +685,8 @@ impl Tool for FavouriteTool {
             tool: self.name().into(),
             msg: format!("参数解析失败: {}", e),
         })?;
-        let link_id = v.get("link_id").and_then(|s| s.as_str()).unwrap_or("");
-        let folder_id = v.get("folder_id").and_then(|s| s.as_str()).unwrap_or("");
+        let link_id = arg_id(&v, "link_id");
+        let folder_id = arg_id(&v, "folder_id");
         let favour_type = v.get("favour_type").and_then(|t| t.as_i64()).unwrap_or(1);
         if link_id.is_empty() {
             return Err(Error::ToolCall {
@@ -689,11 +694,11 @@ impl Tool for FavouriteTool {
                 msg: "link_id 不能为空".into(),
             });
         }
-        let folder = if folder_id.is_empty() { None } else { Some(folder_id) };
+        let folder = if folder_id.is_empty() { None } else { Some(folder_id.as_str()) };
         let result = if favour_type == 2 {
-            api_inter::unfavourite(client, link_id, folder).await
+            api_inter::unfavourite(client, &link_id, folder).await
         } else {
-            api_inter::favourite(client, link_id, folder).await
+            api_inter::favourite(client, &link_id, folder).await
         };
         result.map_err(|e| Error::ToolCall {
             tool: self.name().into(),
@@ -1109,9 +1114,9 @@ impl Tool for MoveFavouriteTool {
 
     fn confirmation(&self, arguments_json: &str) -> ToolConfirmation {
         let v = parsed_args(arguments_json);
-        let link_id = arg_str(&v, "link_id");
-        let folder_id = arg_str(&v, "folder_id");
-        let id_disp = if link_id.is_empty() { "未提供 ID" } else { link_id };
+        let link_id = arg_id(&v, "link_id");
+        let folder_id = arg_id(&v, "folder_id");
+        let id_disp = if link_id.is_empty() { "未提供 ID".to_string() } else { link_id };
         ToolConfirmation {
             tool_name: self.name(),
             risk_level: RiskLevel::Medium,
@@ -1125,21 +1130,21 @@ impl Tool for MoveFavouriteTool {
             tool: self.name().into(),
             msg: format!("参数解析失败: {}", e),
         })?;
-        let link_id = v.get("link_id").and_then(|s| s.as_str()).unwrap_or("");
-        let folder_id = v.get("folder_id").and_then(|s| s.as_str()).unwrap_or("");
+        let link_id = arg_id(&v, "link_id");
+        let folder_id = arg_id(&v, "folder_id");
         if link_id.is_empty() || folder_id.is_empty() {
             return Err(Error::ToolCall {
                 tool: self.name().into(),
                 msg: "link_id 和 folder_id 不能为空".into(),
             });
         }
-        api_inter::unfavourite(client, link_id, None)
+        api_inter::unfavourite(client, &link_id, None)
             .await
             .map_err(|e| Error::ToolCall {
                 tool: self.name().into(),
                 msg: format!("取消默认夹失败: {}", e),
             })?;
-        api_inter::favourite(client, link_id, Some(folder_id))
+        api_inter::favourite(client, &link_id, Some(folder_id.as_str()))
             .await
             .map_err(|e| Error::ToolCall {
                 tool: self.name().into(),
@@ -2006,5 +2011,13 @@ mod tests {
         assert_eq!(id_to_string(&json!("17447756")), Some("17447756".into()));
         assert_eq!(id_to_string(&json!(null)), None);
         assert_eq!(id_to_string(&json!({})), None);
+    }
+
+    #[test]
+    fn arg_id_handles_number_and_string() {
+        let v = json!({"num": 183530204, "str": "17447756"});
+        assert_eq!(arg_id(&v, "num"), "183530204");
+        assert_eq!(arg_id(&v, "str"), "17447756");
+        assert_eq!(arg_id(&v, "missing"), "");
     }
 }

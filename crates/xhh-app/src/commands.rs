@@ -1327,7 +1327,7 @@ fn builtin_templates() -> Vec<AgentTemplate> {
         ),
         (
             "整理收藏夹：按主题自动分类",
-            "帮我把默认收藏夹里的帖子按主题分类整理：\n1. 用 list_favourite_links 分页拉取全部收藏帖子（offset 从 0 递增，直到 has_next 为空），记录每个帖子的 link_id、标题、话题\n2. 用 list_favourite_folders 查看已有的收藏夹\n3. 根据标题和话题规划分类（按游戏名/板块/主题分成若干类）\n4. 对每个分类：若已有名称相近的收藏夹就复用其 id，没有则用 create_favourite_folder 新建\n5. 用 move_favourite（link_id + folder_id=对应分类夹）把每个帖子从默认收藏夹移动到分类夹（工具内部会先取消默认夹再收藏，无需手动两步）\n6. 完成后用列表汇报：每个分类夹装了哪些帖子\n注意：不要创建与已有收藏夹含义重复的新夹；同一帖子只归入一个分类。",
+            "帮我把还没归类的收藏帖子按主题分类整理：\n1. 用 list_uncategorized_favourite_links 拉取所有未分类收藏（未归入任何收藏夹的帖子），记录每个帖子的 link_id、标题、话题；返回为空说明已全部归类，直接告知用户\n2. 用 list_favourite_folders 查看已有的收藏夹\n3. 根据标题和话题规划分类（按游戏名/板块/主题分成若干类）\n4. 对每个分类：若已有名称相近的收藏夹就复用其 id，没有则用 create_favourite_folder 新建\n5. 用 move_favourite（link_id + folder_id=对应分类夹）把每个帖子归入分类夹\n6. 完成后用列表汇报：每个分类夹装了哪些帖子\n注意：不要创建与已有收藏夹含义重复的新夹；同一帖子只归入一个分类。",
         ),
     ];
     items

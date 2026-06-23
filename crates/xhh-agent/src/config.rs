@@ -64,6 +64,9 @@ pub struct OpenAiCfg {
     pub api_key: String,
     pub model: String,
     pub base_url: String,
+    /// 请求超时（秒），0 表示用默认 120
+    #[serde(default)]
+    pub timeout_secs: u64,
 }
 
 /// Anthropic 子配置
@@ -73,6 +76,9 @@ pub struct AnthropicCfg {
     pub model: String,
     pub base_url: String,
     pub max_tokens: u32,
+    /// 请求超时（秒），0 表示用默认 120
+    #[serde(default)]
+    pub timeout_secs: u64,
 }
 
 /// Ollama 子配置
@@ -80,6 +86,9 @@ pub struct AnthropicCfg {
 pub struct OllamaCfg {
     pub model: String,
     pub base_url: String,
+    /// 请求超时（秒），0 表示用默认 600（本地推理较慢）
+    #[serde(default)]
+    pub timeout_secs: u64,
 }
 
 impl AgentConfig {
@@ -138,7 +147,7 @@ impl AgentConfig {
                     } else {
                         c.base_url.clone()
                     },
-                    timeout_secs: 120,
+                    timeout_secs: if c.timeout_secs == 0 { 120 } else { c.timeout_secs },
                 }))
             }
             "anthropic" | "claude" => {
@@ -163,7 +172,7 @@ impl AgentConfig {
                     } else {
                         c.max_tokens
                     },
-                    timeout_secs: 120,
+                    timeout_secs: if c.timeout_secs == 0 { 120 } else { c.timeout_secs },
                 }))
             }
             "ollama" => {
@@ -182,7 +191,7 @@ impl AgentConfig {
                     } else {
                         c.base_url.clone()
                     },
-                    timeout_secs: 600,
+                    timeout_secs: if c.timeout_secs == 0 { 600 } else { c.timeout_secs },
                 }))
             }
             other => Err(Error::Config(format!(
@@ -227,8 +236,25 @@ mod tests {
             ProviderKind::Ollama(c) => {
                 assert_eq!(c.model, "qwen2.5:14b");
                 assert_eq!(c.base_url, "http://localhost:11434");
+                assert_eq!(c.timeout_secs, 600);
             }
             _ => panic!("应该是 Ollama"),
+        }
+    }
+
+    #[test]
+    fn build_provider_timeout_override() {
+        let cfg = AgentConfig {
+            active_provider: "openai".into(),
+            openai: Some(OpenAiCfg {
+                timeout_secs: 300,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        match cfg.build_provider_config().unwrap() {
+            ProviderKind::OpenAi(c) => assert_eq!(c.timeout_secs, 300),
+            _ => panic!("应该是 OpenAi"),
         }
     }
 }

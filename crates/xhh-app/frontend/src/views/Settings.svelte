@@ -26,14 +26,17 @@
   let openaiKey = $state("");
   let openaiModel = $state("");
   let openaiBaseUrl = $state("");
+  let openaiTimeout = $state(0);
   // Anthropic
   let anthropicKey = $state("");
   let anthropicModel = $state("");
   let anthropicBaseUrl = $state("");
   let anthropicMaxTokens = $state(0);
+  let anthropicTimeout = $state(0);
   // Ollama
   let ollamaModel = $state("");
   let ollamaBaseUrl = $state("");
+  let ollamaTimeout = $state(0);
   // 通用
   let maxLoops = $state(8);
   let temperature = $state("");
@@ -77,16 +80,19 @@
         openaiKey = cfg.openai.api_key ?? "";
         openaiModel = cfg.openai.model ?? "";
         openaiBaseUrl = cfg.openai.base_url ?? "";
+        openaiTimeout = cfg.openai.timeout_secs ?? 0;
       }
       if (cfg.anthropic) {
         anthropicKey = cfg.anthropic.api_key ?? "";
         anthropicModel = cfg.anthropic.model ?? "";
         anthropicBaseUrl = cfg.anthropic.base_url ?? "";
         anthropicMaxTokens = cfg.anthropic.max_tokens ?? 0;
+        anthropicTimeout = cfg.anthropic.timeout_secs ?? 0;
       }
       if (cfg.ollama) {
         ollamaModel = cfg.ollama.model ?? "";
         ollamaBaseUrl = cfg.ollama.base_url ?? "";
+        ollamaTimeout = cfg.ollama.timeout_secs ?? 0;
       }
       maxLoops = cfg.max_loops ?? 8;
       temperature = cfg.temperature != null ? String(cfg.temperature) : "";
@@ -159,16 +165,19 @@
           api_key: openaiKey,
           model: openaiModel,
           base_url: openaiBaseUrl,
+          timeout_secs: openaiTimeout,
         },
         anthropic: {
           api_key: anthropicKey,
           model: anthropicModel,
           base_url: anthropicBaseUrl,
           max_tokens: anthropicMaxTokens,
+          timeout_secs: anthropicTimeout,
         },
         ollama: {
           model: ollamaModel,
           base_url: ollamaBaseUrl,
+          timeout_secs: ollamaTimeout,
         },
         max_loops: maxLoops,
         temperature: temperature !== "" ? Number(temperature) : null,
@@ -350,6 +359,10 @@
             <label class="label" for="openai-base-url">Base URL</label>
             <input id="openai-base-url" type="text" bind:value={openaiBaseUrl} class="input" placeholder="https://api.openai.com/v1" />
           </div>
+          <div class="field-group">
+            <label class="label" for="openai-timeout">超时（秒，0 用默认 120）</label>
+            <input id="openai-timeout" type="number" bind:value={openaiTimeout} class="input" placeholder="120" min="0" />
+          </div>
         {:else if activeProvider === "anthropic"}
           <div class="field-group">
             <label class="label" for="anthropic-key">API Key</label>
@@ -367,6 +380,10 @@
             <label class="label" for="anthropic-max-tokens">Max Tokens</label>
             <input id="anthropic-max-tokens" type="number" bind:value={anthropicMaxTokens} class="input" placeholder="4096" min="1" />
           </div>
+          <div class="field-group">
+            <label class="label" for="anthropic-timeout">超时（秒，0 用默认 120）</label>
+            <input id="anthropic-timeout" type="number" bind:value={anthropicTimeout} class="input" placeholder="120" min="0" />
+          </div>
         {:else if activeProvider === "ollama"}
           <div class="field-group">
             <label class="label" for="ollama-model">Model</label>
@@ -375,6 +392,10 @@
           <div class="field-group">
             <label class="label" for="ollama-base-url">Base URL</label>
             <input id="ollama-base-url" type="text" bind:value={ollamaBaseUrl} class="input" placeholder="http://localhost:11434" />
+          </div>
+          <div class="field-group">
+            <label class="label" for="ollama-timeout">超时（秒，0 用默认 600）</label>
+            <input id="ollama-timeout" type="number" bind:value={ollamaTimeout} class="input" placeholder="600" min="0" />
           </div>
         {/if}
       </section>

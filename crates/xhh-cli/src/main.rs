@@ -147,6 +147,8 @@ enum AgentCmd {
         model: String,
         #[arg(long, default_value = "https://api.openai.com/v1")]
         base_url: String,
+        #[arg(long, default_value_t = 120, help = "请求超时（秒）")]
+        timeout: u64,
     },
     /// 设置 Anthropic Claude 凭据
     SetAnthropic {
@@ -157,6 +159,8 @@ enum AgentCmd {
         base_url: String,
         #[arg(long, default_value_t = 4096)]
         max_tokens: u32,
+        #[arg(long, default_value_t = 120, help = "请求超时（秒）")]
+        timeout: u64,
     },
     /// 设置 Ollama
     SetOllama {
@@ -164,6 +168,8 @@ enum AgentCmd {
         model: String,
         #[arg(long, default_value = "http://localhost:11434")]
         base_url: String,
+        #[arg(long, default_value_t = 600, help = "请求超时（秒）")]
+        timeout: u64,
     },
     /// 设置最大循环次数与运行选项
     SetLimits {
@@ -542,11 +548,13 @@ async fn handle_agent(cmd: AgentCmd, _cfg_path: &Option<PathBuf>) -> Result<()> 
             api_key,
             model,
             base_url,
+            timeout,
         } => {
             ac.openai = Some(OpenAiCfg {
                 api_key,
                 model,
                 base_url,
+                timeout_secs: timeout,
             });
             ac.active_provider = "openai".into();
             ac.save(None)?;
@@ -558,20 +566,26 @@ async fn handle_agent(cmd: AgentCmd, _cfg_path: &Option<PathBuf>) -> Result<()> 
             model,
             base_url,
             max_tokens,
+            timeout,
         } => {
             ac.anthropic = Some(AnthropicCfg {
                 api_key,
                 model,
                 base_url,
                 max_tokens,
+                timeout_secs: timeout,
             });
             ac.active_provider = "anthropic".into();
             ac.save(None)?;
             println!("Anthropic 配置已保存");
         }
 
-        AgentCmd::SetOllama { model, base_url } => {
-            ac.ollama = Some(OllamaCfg { model, base_url });
+        AgentCmd::SetOllama { model, base_url, timeout } => {
+            ac.ollama = Some(OllamaCfg {
+                model,
+                base_url,
+                timeout_secs: timeout,
+            });
             ac.active_provider = "ollama".into();
             ac.save(None)?;
             println!("Ollama 配置已保存");

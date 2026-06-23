@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::{Mutex, Notify, RwLock};
 use xhh_agent::provider::ChatMessage;
 use xhh_agent::runner::AgentRunner;
 use xhh_core::client::XhhClient;
@@ -160,6 +160,12 @@ pub struct AppState {
     /// 扫码登录轮询代际：每次开始新轮询或主动取消时自增，
     /// 正在轮询的任务发现自己的代际已过期即退出
     pub login_generation: Arc<std::sync::atomic::AtomicU64>,
+    /// 帖子 AI 分析流代际，用于主动停止旧流
+    pub ai_generation: Arc<std::sync::atomic::AtomicU64>,
+    pub ai_cancel_notify: Arc<Notify>,
+    /// Agent 对话流代际，用于主动停止旧流
+    pub agent_generation: Arc<std::sync::atomic::AtomicU64>,
+    pub agent_cancel_notify: Arc<Notify>,
 }
 
 impl Default for AppState {
@@ -169,6 +175,10 @@ impl Default for AppState {
             agent_runner: Arc::new(Mutex::new(None)),
             agent_sessions: Arc::new(Mutex::new(AgentSessions::new())),
             login_generation: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            ai_generation: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            ai_cancel_notify: Arc::new(Notify::new()),
+            agent_generation: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            agent_cancel_notify: Arc::new(Notify::new()),
         }
     }
 }
@@ -236,6 +246,62 @@ impl AppState {
         use std::sync::atomic::Ordering;
         self.login_generation.load(Ordering::SeqCst) != gen
     }
+
+    pub fn begin_ai_generation(&self) -> u64 {
+        use std::sync::atomic::Ordering;
+        let gen = self.ai_generation.fetch_add(1, Ordering::SeqCst) + 1;
+        self.ai_cancel_notify.notify_waiters();
+        gen
+    }
+
+    pub fn bump_ai_generation(&self) {
+        use std::sync::atomic::Ordering;
+        self.ai_generation.fetch_add(1, Ordering::SeqCst);
+        self.ai_cancel_notify.notify_waiters();
+    }
+
+    pub fn ai_cancelled(&self, gen: u64) -> bool {
+        use std::sync::atomic::Ordering;
+        self.ai_generation.load(Ordering::SeqCst) != gen
+    }
+
+    pub async fn wait_ai_cancelled(&self, gen: u64) {
+        loop {
+            let notified = self.ai_cancel_notify.notified();
+            if self.ai_cancelled(gen) {
+                return;
+            }
+            notified.await;
+        }
+    }
+
+    pub fn begin_agent_generation(&self) -> u64 {
+        use std::sync::atomic::Ordering;
+        let gen = self.agent_generation.fetch_add(1, Ordering::SeqCst) + 1;
+        self.agent_cancel_notify.notify_waiters();
+        gen
+    }
+
+    pub fn bump_agent_generation(&self) {
+        use std::sync::atomic::Ordering;
+        self.agent_generation.fetch_add(1, Ordering::SeqCst);
+        self.agent_cancel_notify.notify_waiters();
+    }
+
+    pub fn agent_cancelled(&self, gen: u64) -> bool {
+        use std::sync::atomic::Ordering;
+        self.agent_generation.load(Ordering::SeqCst) != gen
+    }
+
+    pub async fn wait_agent_cancelled(&self, gen: u64) {
+        loop {
+            let notified = self.agent_cancel_notify.notified();
+            if self.agent_cancelled(gen) {
+                return;
+            }
+            notified.await;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -255,5 +321,35 @@ mod tests {
         assert_ne!(g1, g2, "每轮代际号应递增");
         assert!(!state.login_cancelled(g2), "新轮次未被取消");
         assert!(state.login_cancelled(g1), "开始新轮次后旧轮次应失效");
+    }
+
+    #[test]
+    fn ai_generation_is_unique_and_cancelable() {
+        let state = AppState::default();
+        let g1 = state.begin_ai_generation();
+        assert!(!state.ai_cancelled(g1));
+
+        state.bump_ai_generation();
+        assert!(state.ai_cancelled(g1));
+
+        let g2 = state.begin_ai_generation();
+        assert_ne!(g1, g2);
+        assert!(!state.ai_cancelled(g2));
+        assert!(state.ai_cancelled(g1));
+    }
+
+    #[test]
+    fn agent_generation_is_unique_and_cancelable() {
+        let state = AppState::default();
+        let g1 = state.begin_agent_generation();
+        assert!(!state.agent_cancelled(g1));
+
+        state.bump_agent_generation();
+        assert!(state.agent_cancelled(g1));
+
+        let g2 = state.begin_agent_generation();
+        assert_ne!(g1, g2);
+        assert!(!state.agent_cancelled(g2));
+        assert!(state.agent_cancelled(g1));
     }
 }

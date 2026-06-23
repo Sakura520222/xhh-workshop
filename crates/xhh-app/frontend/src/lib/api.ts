@@ -149,6 +149,8 @@ export const agentChat = (message: string): Promise<AgentResult> =>
 
 export const agentReset = (): Promise<void> => invoke("agent_reset");
 
+export const agentCancelStream = (): Promise<void> => invoke("agent_cancel_stream");
+
 export const agentGetConfig = (): Promise<any> => invoke("agent_get_config");
 
 export const agentSaveConfig = (config: any): Promise<void> =>
@@ -302,6 +304,8 @@ export const aiCacheGet = (linkId: string): Promise<AiCacheItem[]> =>
 
 export const aiCacheSave = (linkId: string, kind: string, content: string): Promise<AiCacheItem> =>
   invoke("ai_cache_save", { linkId, kind, content });
+
+export const aiCancelStream = (): Promise<void> => invoke("ai_cancel_stream");
 
 // Window
 export type WindowEffect = "none" | "mica" | "acrylic";

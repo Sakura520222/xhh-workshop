@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from "svelte";
   import {
     agentChatStream,
+    agentCancelStream,
     agentReset,
     agentHistoryGet,
     agentHistorySave,
@@ -77,6 +78,7 @@
   let operationNotice = $state("");
   let deletePreviewRequestId = 0;
   let operationNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+  let agentStreamId = 0;
 
   // 多会话 + 模板状态
   let sessions = $state<SessionMeta[]>([]);
@@ -450,14 +452,18 @@
   }
 
   function startAgentStream(text: string, confirmations: AgentToolConfirmationDecision[] = []) {
+    const streamId = ++agentStreamId;
+    const isCurrentStream = () => agentStreamId === streamId;
     void agentChatStream(
       text,
       (chunk) => {
+        if (!isCurrentStream()) return;
         const aiIdx = messages.length - 1;
         messages[aiIdx] = { ...messages[aiIdx], text: messages[aiIdx].text + chunk };
         scrollBottom();
       },
       (name) => {
+        if (!isCurrentStream()) return;
         const aiIdx = messages.length - 1;
         const m = messages[aiIdx];
         const tools = [...(m.tools ?? []), name];
@@ -465,6 +471,7 @@
         scrollBottom();
       },
       (info: AgentStreamDone) => {
+        if (!isCurrentStream()) return;
         const aiIdx = messages.length - 1;
         const m = messages[aiIdx];
         messages[aiIdx] = { ...m, streaming: false, text: m.text || "(无文本输出)", loops: info.loops_used };
@@ -479,6 +486,7 @@
         focusMessageInput();
       },
       (err) => {
+        if (!isCurrentStream()) return;
         const aiIdx = messages.length - 1;
         const isConfirmationWait = err.includes("危险操作等待确认");
         if (isConfirmationWait && (pendingConfirmation || autoApproveQueued)) {
@@ -510,6 +518,7 @@
         focusMessageInput();
       },
       (req) => {
+        if (!isCurrentStream()) return;
         pendingMessage = text;
         if (autoApprove) {
           // 自动审批：暂存请求，不弹框；待旧流报错清理后续发批准
@@ -522,6 +531,35 @@
       },
       confirmations,
     );
+  }
+
+  async function stopAgentStream() {
+    if (!busy) return;
+    agentStreamId += 1;
+    const aiIdx = messages.length - 1;
+    const current = messages[aiIdx];
+    if (current?.role === "assistant") {
+      messages[aiIdx] = {
+        ...current,
+        text: current.text.trim() ? current.text : "已停止",
+        streaming: false,
+      };
+    }
+    busy = false;
+    pendingMessage = "";
+    pendingConfirmation = null;
+    approvedConfirmations = [];
+    autoApproveQueued = null;
+    resetDeletePreview();
+    showOperationNotice("已停止回复");
+    scrollBottom();
+    persist();
+    focusMessageInput();
+    try {
+      await agentCancelStream();
+    } catch (e) {
+      console.error("cancel agent stream failed:", e);
+    }
   }
 
   async function send() {
@@ -766,9 +804,11 @@
       >
         存为模板
       </button>
-      <button class="send-btn" onclick={send} disabled={busy || !input.trim()}>
-        {busy ? "执行中" : "发送"}
-      </button>
+      {#if busy}
+        <button class="stop-btn" onclick={stopAgentStream}>停止</button>
+      {:else}
+        <button class="send-btn" onclick={send} disabled={!input.trim()}>发送</button>
+      {/if}
     </div>
   </section>
   </div><!-- /.agent-page -->
@@ -966,7 +1006,8 @@
   }
 
   .reset-btn,
-  .send-btn {
+  .send-btn,
+  .stop-btn {
     min-height: 44px;
     border-radius: 15px;
     font-size: 14px;
@@ -1699,6 +1740,19 @@
   }
 
   .send-btn:hover:not(:disabled) {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+  }
+
+  .stop-btn {
+    align-self: stretch;
+    padding: 0 26px;
+    background: var(--danger-soft);
+    color: var(--danger-fg);
+    border: 1px solid rgba(248, 113, 113, 0.24);
+  }
+
+  .stop-btn:hover {
     filter: brightness(1.08);
     transform: translateY(-1px);
   }

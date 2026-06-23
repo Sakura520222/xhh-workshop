@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { postDetail, postDelete, commentCreate, likePost, likeComment, saveImage as saveImageApi, subComments, aiAnalyzeStream, aiCacheGet, aiCacheSave, favourite, favourFolders, createFavouriteFolder, originalImage } from "../lib/api";
+  import { postDetail, postDelete, commentCreate, likePost, likeComment, saveImage as saveImageApi, subComments, aiAnalyzeStream, aiCancelStream, aiCacheGet, aiCacheSave, favourite, favourFolders, createFavouriteFolder, originalImage } from "../lib/api";
   import type { AiCacheItem } from "../lib/api";
   import { getSelectedLinkId, setView, getPrevView, getFavState, setFavState, clearFavState, getAuth, setEditTarget } from "../lib/stores.svelte";
   import { toastSuccess, toastInfo, toastError } from "../lib/toast.svelte";
@@ -29,6 +29,7 @@
   let aiLoading = $state(false);
   let aiResult = $state("");
   let aiError = $state("");
+  let aiStopped = $state(false);
   let aiStreamId = $state(0);
   let aiCacheEntries: AiCacheItem[] = $state([]);
 
@@ -39,7 +40,7 @@
  // 打开 AI 面板：首次进入（无结果/未加载/无报错）立即触发总结
  function openAiPanel() {
    aiPanel = true;
-   if (!aiResult && !aiLoading && !aiError) {
+   if (!aiResult && !aiLoading && !aiError && !aiStopped) {
      summarize();
    }
  }
@@ -61,6 +62,7 @@
     const id = ++aiStreamId;
     aiLoading = true;
     aiError = "";
+    aiStopped = false;
     aiResult = "";
 
     const text = bodySegments
@@ -106,8 +108,21 @@
           }
         }
       },
-      (err) => { if (aiStreamId === id) { aiError = err; aiLoading = false; } },
+      (err) => { if (aiStreamId === id) { aiError = err; aiStopped = false; aiLoading = false; } },
     );
+  }
+
+  async function stopAiReply() {
+    if (!aiLoading) return;
+    aiStreamId += 1;
+    aiLoading = false;
+    aiStopped = true;
+    try {
+      await aiCancelStream();
+      toastInfo("已停止 AI 回复");
+    } catch (e) {
+      toastError("停止 AI 失败", String(e));
+    }
   }
 
   // --- 图片查看器 ---
@@ -670,14 +685,19 @@
      <div class="ai-panel" onclick={(e) => e.stopPropagation()}>
        <div class="ai-header">
          <span class="ai-title">AI 助手</span>
-         <button class="ai-close" onclick={closeAiPanel}>关闭</button>
+         <div class="ai-header-actions">
+           {#if aiLoading}
+             <button class="ai-stop" onclick={stopAiReply}>停止</button>
+           {/if}
+           <button class="ai-close" onclick={closeAiPanel}>关闭</button>
+         </div>
        </div>
        <div class="ai-body">
-         {#if !aiLoading && !aiResult && !aiError}
+         {#if !aiLoading && !aiResult && !aiError && !aiStopped}
            {#if aiCacheEntries.length > 0}
              <div class="ai-history">
                {#each aiCacheEntries as entry}
-                 <button class="ai-history-item" onclick={() => { aiResult = entry.content; }}>
+                 <button class="ai-history-item" onclick={() => { aiResult = entry.content; aiStopped = false; }}>
                    <span class="ai-history-kind">总结</span>
                    <span class="ai-history-time">{fmtTime(entry.updated_at)}</span>
                  </button>
@@ -694,7 +714,16 @@
              <button class="ai-retry" onclick={() => { aiError = ""; }}>重试</button>
              <button class="ai-retry" onclick={closeAiPanel}>关闭</button>
            </div>
+         {:else if aiStopped && !aiResult}
+           <div class="ai-stopped">已停止回复</div>
+           <div class="ai-error-actions">
+             <button class="ai-retry" onclick={summarize} disabled={!post}>重新总结</button>
+             <button class="ai-retry" onclick={closeAiPanel}>关闭</button>
+           </div>
          {:else}
+           {#if aiStopped}
+             <div class="ai-stopped compact">已停止回复</div>
+           {/if}
            <div class="ai-result selectable">{@html renderAiMarkdown(aiResult)}{#if aiLoading}<span class="ai-cursor"></span>{/if}</div>
            {#if !aiLoading}
              <button class="ai-back-btn" onclick={() => { aiResult = ""; }}>重新选择</button>
@@ -1691,6 +1720,23 @@
     font-size: 14px;
     font-weight: 500;
   }
+  .ai-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .ai-stop {
+    font-size: 12px;
+    color: var(--danger);
+    padding: 4px 10px;
+    border-radius: 8px;
+    background: var(--danger-soft);
+    border: 0.5px solid rgba(248, 113, 113, 0.24);
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .ai-stop:hover {
+    filter: brightness(1.06);
+  }
   .ai-close {
     font-size: 12px;
     color: var(--text-secondary);
@@ -1939,6 +1985,18 @@
     color: var(--danger);
     font-size: 13px;
     line-height: 1.5;
+  }
+  .ai-stopped {
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--fill-hover);
+    border: 0.5px solid var(--glass-border);
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .ai-stopped.compact {
+    margin-bottom: 10px;
   }
   .ai-error-actions {
     display: flex;

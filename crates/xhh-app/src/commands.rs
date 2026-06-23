@@ -15,6 +15,51 @@ use xhh_core::client::XhhClient;
 
 use crate::state::{AgentSessions, AppState, SessionData, SessionMeta};
 
+const STREAM_CANCELLED: &str = "__xhh_stream_cancelled__";
+
+#[derive(Clone, Copy)]
+enum StreamKind {
+    Ai,
+    Agent,
+}
+
+fn is_stream_cancelled(err: &str) -> bool {
+    err == STREAM_CANCELLED
+}
+
+async fn wait_stream_cancelled(state: &AppState, gen: u64, kind: StreamKind) {
+    match kind {
+        StreamKind::Ai => state.wait_ai_cancelled(gen).await,
+        StreamKind::Agent => state.wait_agent_cancelled(gen).await,
+    }
+}
+
+async fn send_stream_request(
+    request: reqwest::RequestBuilder,
+    state: &AppState,
+    gen: u64,
+    kind: StreamKind,
+) -> Result<reqwest::Response, String> {
+    tokio::select! {
+        resp = request.send() => resp.map_err(|e| e.to_string()),
+        _ = wait_stream_cancelled(state, gen, kind) => Err(STREAM_CANCELLED.into()),
+    }
+}
+
+async fn read_stream_chunk(
+    resp: &mut reqwest::Response,
+    state: &AppState,
+    gen: u64,
+    kind: StreamKind,
+) -> Result<Option<Vec<u8>>, String> {
+    tokio::select! {
+        chunk = resp.chunk() => chunk
+            .map(|chunk| chunk.map(|bytes| bytes.to_vec()))
+            .map_err(|e| e.to_string()),
+        _ = wait_stream_cancelled(state, gen, kind) => Err(STREAM_CANCELLED.into()),
+    }
+}
+
 // ─── Auth ────────────────────────────────────────────────
 
 /// 获取登录二维码
@@ -386,7 +431,9 @@ pub async fn post_edit(
         hashtags,
         link_tag,
     };
-    api_post::edit_post(&c, req).await.map_err(|e| e.to_string())
+    api_post::edit_post(&c, req)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// 保存草稿
@@ -408,7 +455,9 @@ pub async fn post_draft(
         topic_ids,
         link_tag,
     };
-    api_post::save_draft(&c, req).await.map_err(|e| e.to_string())
+    api_post::save_draft(&c, req)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// 草稿箱列表
@@ -636,14 +685,14 @@ pub async fn search_community(
 #[tauri::command]
 pub async fn search_found(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     let c = state.require_client().await?;
-    api_search::search_found(&c).await.map_err(|e| e.to_string())
+    api_search::search_found(&c)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// 搜索欢迎页（推荐位）
 #[tauri::command]
-pub async fn search_welcome_page(
-    state: State<'_, AppState>,
-) -> Result<serde_json::Value, String> {
+pub async fn search_welcome_page(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     let c = state.require_client().await?;
     api_search::search_welcome_page(&c)
         .await
@@ -685,9 +734,14 @@ pub async fn user_link_list(
     limit: Option<u32>,
 ) -> Result<serde_json::Value, String> {
     let c = state.require_client().await?;
-    api_user::user_link_list(&c, userid.as_deref(), offset.unwrap_or(0), limit.unwrap_or(20))
-        .await
-        .map_err(|e| e.to_string())
+    api_user::user_link_list(
+        &c,
+        userid.as_deref(),
+        offset.unwrap_or(0),
+        limit.unwrap_or(20),
+    )
+    .await
+    .map_err(|e| e.to_string())
 }
 
 // ─── Agent ───────────────────────────────────────────────
@@ -1449,12 +1503,14 @@ pub async fn agent_template_delete(id: String) -> Result<(), String> {
 #[tauri::command]
 pub async fn ai_analyze_stream(
     app: AppHandle,
+    state: State<'_, AppState>,
     prompt: String,
     images: Option<Vec<String>>,
 ) -> Result<(), String> {
     use xhh_agent::config::ProviderKind;
     use xhh_agent::provider::ChatMessage;
 
+    let generation = state.begin_ai_generation();
     let ac = xhh_agent::config::AgentConfig::load(None).map_err(|e| e.to_string())?;
     let provider_kind = ac.build_provider_config().map_err(|e| e.to_string())?;
 
@@ -1475,22 +1531,51 @@ pub async fn ai_analyze_stream(
         data_uris
     };
 
+    if state.ai_cancelled(generation) {
+        let _ = app.emit("ai-done", ());
+        return Ok(());
+    }
+
     let msgs = if final_images.is_empty() {
         vec![ChatMessage::user(final_prompt)]
     } else {
         vec![ChatMessage::user_with_images(final_prompt, final_images)]
     };
 
-    match &provider_kind {
-        ProviderKind::OpenAi(c) => stream_openai(&app, c, msgs, ac.temperature).await,
-        ProviderKind::Anthropic(c) => stream_anthropic(&app, c, msgs, ac.temperature).await,
-        ProviderKind::Ollama(c) => stream_ollama(&app, c, msgs, ac.temperature).await,
+    let result = match &provider_kind {
+        ProviderKind::OpenAi(c) => {
+            stream_openai(&app, &state, generation, c, msgs, ac.temperature).await
+        }
+        ProviderKind::Anthropic(c) => {
+            stream_anthropic(&app, &state, generation, c, msgs, ac.temperature).await
+        }
+        ProviderKind::Ollama(c) => {
+            stream_ollama(&app, &state, generation, c, msgs, ac.temperature).await
+        }
+    };
+
+    match result {
+        Err(e) if is_stream_cancelled(&e) => {
+            tracing::info!("AI 分析已停止");
+            let _ = app.emit("ai-done", ());
+            Ok(())
+        }
+        other => other,
     }
+}
+
+#[tauri::command]
+pub async fn ai_cancel_stream(state: State<'_, AppState>) -> Result<(), String> {
+    state.bump_ai_generation();
+    tracing::info!("收到停止 AI 分析请求");
+    Ok(())
 }
 
 /// OpenAI SSE 流式
 async fn stream_openai(
     app: &AppHandle,
+    state: &AppState,
+    generation: u64,
     cfg: &xhh_agent::provider::openai::OpenAiConfig,
     messages: Vec<xhh_agent::provider::ChatMessage>,
     temperature: Option<f32>,
@@ -1512,13 +1597,13 @@ async fn stream_openai(
         .build()
         .map_err(|e| e.to_string())?;
 
-    let resp = client
-        .post(&url)
-        .bearer_auth(&cfg.api_key)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    let resp = send_stream_request(
+        client.post(&url).bearer_auth(&cfg.api_key).json(&body),
+        state,
+        generation,
+        StreamKind::Ai,
+    )
+    .await?;
 
     let status = resp.status();
     if !status.is_success() {
@@ -1532,7 +1617,7 @@ async fn stream_openai(
     let mut buf = String::new();
 
     loop {
-        let chunk = resp.chunk().await.map_err(|e| e.to_string())?;
+        let chunk = read_stream_chunk(&mut resp, state, generation, StreamKind::Ai).await?;
         let Some(chunk) = chunk else { break };
         buf.push_str(&String::from_utf8_lossy(&chunk));
 
@@ -1568,6 +1653,8 @@ async fn stream_openai(
 /// Anthropic SSE 流式
 async fn stream_anthropic(
     app: &AppHandle,
+    state: &AppState,
+    generation: u64,
     cfg: &xhh_agent::provider::anthropic::AnthropicConfig,
     messages: Vec<xhh_agent::provider::ChatMessage>,
     temperature: Option<f32>,
@@ -1622,14 +1709,17 @@ async fn stream_anthropic(
         .build()
         .map_err(|e| e.to_string())?;
 
-    let resp = client
-        .post(&url)
-        .header("x-api-key", &cfg.api_key)
-        .header("anthropic-version", "2023-06-01")
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    let resp = send_stream_request(
+        client
+            .post(&url)
+            .header("x-api-key", &cfg.api_key)
+            .header("anthropic-version", "2023-06-01")
+            .json(&body),
+        state,
+        generation,
+        StreamKind::Ai,
+    )
+    .await?;
 
     let status = resp.status();
     if !status.is_success() {
@@ -1643,7 +1733,7 @@ async fn stream_anthropic(
     let mut buf = String::new();
 
     loop {
-        let chunk = resp.chunk().await.map_err(|e| e.to_string())?;
+        let chunk = read_stream_chunk(&mut resp, state, generation, StreamKind::Ai).await?;
         let Some(chunk) = chunk else { break };
         buf.push_str(&String::from_utf8_lossy(&chunk));
 
@@ -1696,6 +1786,8 @@ async fn stream_anthropic(
 /// Ollama NDJSON 流式
 async fn stream_ollama(
     app: &AppHandle,
+    state: &AppState,
+    generation: u64,
     cfg: &xhh_agent::provider::ollama::OllamaConfig,
     messages: Vec<xhh_agent::provider::ChatMessage>,
     temperature: Option<f32>,
@@ -1743,12 +1835,13 @@ async fn stream_ollama(
         .build()
         .map_err(|e| e.to_string())?;
 
-    let resp = client
-        .post(&url)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    let resp = send_stream_request(
+        client.post(&url).json(&body),
+        state,
+        generation,
+        StreamKind::Ai,
+    )
+    .await?;
 
     let status = resp.status();
     if !status.is_success() {
@@ -1762,7 +1855,7 @@ async fn stream_ollama(
     let mut buf = String::new();
 
     loop {
-        let chunk = resp.chunk().await.map_err(|e| e.to_string())?;
+        let chunk = read_stream_chunk(&mut resp, state, generation, StreamKind::Ai).await?;
         let Some(chunk) = chunk else { break };
         buf.push_str(&String::from_utf8_lossy(&chunk));
 
@@ -1810,6 +1903,8 @@ struct StreamOutput {
 /// OpenAI SSE 流式（支持 tool_calls 收集）
 async fn stream_agent_openai(
     app: &AppHandle,
+    state: &AppState,
+    generation: u64,
     cfg: &xhh_agent::provider::openai::OpenAiConfig,
     messages: Vec<xhh_agent::provider::ChatMessage>,
     tools: Vec<xhh_agent::provider::ToolSpec>,
@@ -1838,13 +1933,13 @@ async fn stream_agent_openai(
         .build()
         .map_err(|e| e.to_string())?;
 
-    let resp = client
-        .post(&url)
-        .bearer_auth(&cfg.api_key)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    let resp = send_stream_request(
+        client.post(&url).bearer_auth(&cfg.api_key).json(&body),
+        state,
+        generation,
+        StreamKind::Agent,
+    )
+    .await?;
     let status = resp.status();
     if !status.is_success() {
         let text = resp.text().await.unwrap_or_default();
@@ -1859,7 +1954,7 @@ async fn stream_agent_openai(
     let mut tc_map: BTreeMap<usize, (String, String, String)> = BTreeMap::new(); // idx -> (id, name, args)
 
     loop {
-        let chunk = resp.chunk().await.map_err(|e| e.to_string())?;
+        let chunk = read_stream_chunk(&mut resp, state, generation, StreamKind::Agent).await?;
         let Some(chunk) = chunk else { break };
         buf.push_str(&String::from_utf8_lossy(&chunk));
 
@@ -1941,6 +2036,8 @@ async fn stream_agent_openai(
 /// Anthropic SSE 流式（支持 tool_use 收集）
 async fn stream_agent_anthropic(
     app: &AppHandle,
+    state: &AppState,
+    generation: u64,
     cfg: &xhh_agent::provider::anthropic::AnthropicConfig,
     messages: Vec<xhh_agent::provider::ChatMessage>,
     tools: Vec<xhh_agent::provider::ToolSpec>,
@@ -1993,14 +2090,17 @@ async fn stream_agent_anthropic(
         .timeout(Duration::from_secs(300))
         .build()
         .map_err(|e| e.to_string())?;
-    let resp = client
-        .post(&url)
-        .header("x-api-key", &cfg.api_key)
-        .header("anthropic-version", "2023-06-01")
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    let resp = send_stream_request(
+        client
+            .post(&url)
+            .header("x-api-key", &cfg.api_key)
+            .header("anthropic-version", "2023-06-01")
+            .json(&body),
+        state,
+        generation,
+        StreamKind::Agent,
+    )
+    .await?;
     let status = resp.status();
     if !status.is_success() {
         let text = resp.text().await.unwrap_or_default();
@@ -2018,7 +2118,7 @@ async fn stream_agent_anthropic(
     let mut cur_tc_args = String::new();
 
     loop {
-        let chunk = resp.chunk().await.map_err(|e| e.to_string())?;
+        let chunk = read_stream_chunk(&mut resp, state, generation, StreamKind::Agent).await?;
         let Some(chunk) = chunk else { break };
         buf.push_str(&String::from_utf8_lossy(&chunk));
 
@@ -2105,6 +2205,8 @@ async fn stream_agent_anthropic(
 /// Ollama NDJSON 流式（支持 tool_calls）
 async fn stream_agent_ollama(
     app: &AppHandle,
+    state: &AppState,
+    generation: u64,
     cfg: &xhh_agent::provider::ollama::OllamaConfig,
     messages: Vec<xhh_agent::provider::ChatMessage>,
     tools: Vec<xhh_agent::provider::ToolSpec>,
@@ -2152,12 +2254,13 @@ async fn stream_agent_ollama(
         .timeout(Duration::from_secs(600))
         .build()
         .map_err(|e| e.to_string())?;
-    let resp = client
-        .post(&url)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    let resp = send_stream_request(
+        client.post(&url).json(&body),
+        state,
+        generation,
+        StreamKind::Agent,
+    )
+    .await?;
     let status = resp.status();
     if !status.is_success() {
         let text = resp.text().await.unwrap_or_default();
@@ -2172,7 +2275,7 @@ async fn stream_agent_ollama(
     let mut tool_calls: Vec<xhh_agent::provider::ToolCall> = Vec::new();
 
     loop {
-        let chunk = resp.chunk().await.map_err(|e| e.to_string())?;
+        let chunk = read_stream_chunk(&mut resp, state, generation, StreamKind::Agent).await?;
         let Some(chunk) = chunk else { break };
         buf.push_str(&String::from_utf8_lossy(&chunk));
 
@@ -2253,6 +2356,7 @@ pub async fn agent_chat_stream(
     use xhh_agent::config::ProviderKind;
     use xhh_agent::provider::ChatMessage;
 
+    let generation = state.begin_agent_generation();
     ensure_agent_runtime(&state).await?;
 
     let ac = xhh_agent::config::AgentConfig::load(None).map_err(|e| e.to_string())?;
@@ -2301,6 +2405,16 @@ pub async fn agent_chat_stream(
     let mut all_tool_calls = tools_init;
 
     loop {
+        if state.agent_cancelled(generation) {
+            let snap = flush_messages(&state, &messages_snapshot).await;
+            persist_session(&snap);
+            let _ = app.emit(
+                "agent-done",
+                serde_json::json!({ "tool_calls": all_tool_calls, "loops_used": loops_used }),
+            );
+            return Ok(());
+        }
+
         let is_resuming = resume_pending.is_some();
         let output = if let Some(pending) = resume_pending.take() {
             pending
@@ -2314,6 +2428,8 @@ pub async fn agent_chat_stream(
                 ProviderKind::OpenAi(cfg) => {
                     stream_agent_openai(
                         &app,
+                        &state,
+                        generation,
                         cfg,
                         messages_snapshot.clone(),
                         specs.clone(),
@@ -2324,6 +2440,8 @@ pub async fn agent_chat_stream(
                 ProviderKind::Anthropic(cfg) => {
                     stream_agent_anthropic(
                         &app,
+                        &state,
+                        generation,
                         cfg,
                         messages_snapshot.clone(),
                         specs.clone(),
@@ -2334,6 +2452,8 @@ pub async fn agent_chat_stream(
                 ProviderKind::Ollama(cfg) => {
                     stream_agent_ollama(
                         &app,
+                        &state,
+                        generation,
                         cfg,
                         messages_snapshot.clone(),
                         specs.clone(),
@@ -2344,6 +2464,16 @@ pub async fn agent_chat_stream(
             };
             match out {
                 Ok(o) => o,
+                Err(e) if is_stream_cancelled(&e) => {
+                    tracing::info!("Agent 回复已停止");
+                    let snap = flush_messages(&state, &messages_snapshot).await;
+                    persist_session(&snap);
+                    let _ = app.emit(
+                        "agent-done",
+                        serde_json::json!({ "tool_calls": all_tool_calls, "loops_used": loops_used }),
+                    );
+                    return Ok(());
+                }
                 Err(e) => {
                     // 短锁：写回 messages + touch，锁外持久化
                     let snap = flush_messages(&state, &messages_snapshot).await;
@@ -2365,6 +2495,15 @@ pub async fn agent_chat_stream(
             // 危险工具确认检查
             if ac.confirm_dangerous_tools {
                 for tc in &output.tool_calls {
+                    if state.agent_cancelled(generation) {
+                        let snap = flush_messages(&state, &messages_snapshot).await;
+                        persist_session(&snap);
+                        let _ = app.emit(
+                            "agent-done",
+                            serde_json::json!({ "tool_calls": all_tool_calls, "loops_used": loops_used }),
+                        );
+                        return Ok(());
+                    }
                     let Some(t) = tool_reg.get(&tc.name) else {
                         continue;
                     };
@@ -2410,6 +2549,15 @@ pub async fn agent_chat_stream(
 
             // 工具执行：不持有 sessions 锁
             for tc in &output.tool_calls {
+                if state.agent_cancelled(generation) {
+                    let snap = flush_messages(&state, &messages_snapshot).await;
+                    persist_session(&snap);
+                    let _ = app.emit(
+                        "agent-done",
+                        serde_json::json!({ "tool_calls": all_tool_calls, "loops_used": loops_used }),
+                    );
+                    return Ok(());
+                }
                 all_tool_calls.push(tc.name.clone());
                 let _ = app.emit("agent-tool", &tc.name);
                 let tool_result = match tool_reg.get(&tc.name) {
@@ -2460,6 +2608,13 @@ pub async fn agent_chat_stream(
     persist_session(&snap);
     let _ = app.emit("agent-error", "达到最大循环次数");
     Err("达到最大循环次数".into())
+}
+
+#[tauri::command]
+pub async fn agent_cancel_stream(state: State<'_, AppState>) -> Result<(), String> {
+    state.bump_agent_generation();
+    tracing::info!("收到停止 Agent 回复请求");
+    Ok(())
 }
 
 /// 把当前 messages 写回活跃 session 并 touch，返回 clone 的 session 快照供锁外持久化

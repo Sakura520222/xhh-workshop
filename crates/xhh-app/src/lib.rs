@@ -80,6 +80,7 @@ pub fn run() {
             // agent
             commands::agent_chat,
             commands::agent_chat_stream,
+            commands::agent_cancel_stream,
             commands::agent_history_get,
             commands::agent_history_save,
             commands::agent_history_clear,
@@ -100,6 +101,7 @@ pub fn run() {
             commands::agent_template_delete,
             // ai
             commands::ai_analyze_stream,
+            commands::ai_cancel_stream,
             commands::ai_cache_get,
             commands::ai_cache_save,
             // content cache

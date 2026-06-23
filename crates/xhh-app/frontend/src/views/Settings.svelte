@@ -14,11 +14,15 @@
   import { getTheme, setTheme, THEMES, setWindowEffectAttr, getColorMode, setColorMode } from "../lib/stores.svelte";
 
   type ProviderKey = "openai" | "anthropic" | "ollama";
+  type Tab = "appearance" | "model" | "storage";
 
   let loading = $state(true);
   let saving = $state(false);
   let error = $state("");
   let saved = $state(false);
+
+  // 顶层类目
+  let activeTab = $state<Tab>("appearance");
 
   // 表单状态
   let activeProvider = $state<ProviderKey>("openai");
@@ -55,6 +59,12 @@
 
   let currentTheme = $derived(getTheme());
   let currentMode = $derived(getColorMode());
+
+  const tabs: { key: Tab; label: string }[] = [
+    { key: "appearance", label: "外观" },
+    { key: "model", label: "模型" },
+    { key: "storage", label: "存储" },
+  ];
 
   const windowEffectOptions: { key: WindowEffect; label: string; hint: string }[] = [
     { key: "mica", label: "云母", hint: "Windows 11 推荐效果" },
@@ -215,77 +225,94 @@
     <span class="topbar-title">设置</span>
   </div>
 
-  <section class="section">
-    <h3 class="section-title">外观主题</h3>
-    <div class="theme-grid">
-      {#each THEMES as opt}
-        <button
-          type="button"
-          class="theme-card"
-          class:active={currentTheme === opt.key}
-          style:--preview={opt.color}
-          aria-pressed={currentTheme === opt.key}
-          onclick={() => setTheme(opt.key)}
-        >
-          <span class="theme-swatch" aria-hidden="true"></span>
-          <span class="theme-name">{opt.label}</span>
-          {#if currentTheme === opt.key}
-            <span class="theme-check" aria-hidden="true">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            </span>
-          {/if}
-        </button>
-      {/each}
-    </div>
+  <div class="nav-tabs" role="tablist">
+    {#each tabs as t}
+      <button
+        type="button"
+        role="tab"
+        class="nav-tab"
+        class:active={activeTab === t.key}
+        aria-selected={activeTab === t.key}
+        onclick={() => { activeTab = t.key; }}
+      >
+        {t.label}
+      </button>
+    {/each}
+  </div>
 
-    <div class="mode-row">
-      <span class="mode-label">显示模式</span>
-      <div class="mode-segment" role="group" aria-label="明暗模式">
-        <button
-          type="button"
-          class="seg"
-          class:active={currentMode === "dark"}
-          aria-pressed={currentMode === "dark"}
-          onclick={() => setColorMode("dark")}
-        >深色</button>
-        <button
-          type="button"
-          class="seg"
-          class:active={currentMode === "light"}
-          aria-pressed={currentMode === "light"}
-          onclick={() => setColorMode("light")}
-        >浅色</button>
+  {#if activeTab === "appearance"}
+    <!-- 外观：纯本地操作，即时生效 -->
+    <section class="section">
+      <h3 class="section-title">主题色</h3>
+      <div class="theme-grid">
+        {#each THEMES as opt}
+          <button
+            type="button"
+            class="theme-card"
+            class:active={currentTheme === opt.key}
+            style:--preview={opt.color}
+            aria-pressed={currentTheme === opt.key}
+            onclick={() => setTheme(opt.key)}
+          >
+            <span class="theme-swatch" aria-hidden="true"></span>
+            <span class="theme-name">{opt.label}</span>
+            {#if currentTheme === opt.key}
+              <span class="theme-check" aria-hidden="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </span>
+            {/if}
+          </button>
+        {/each}
       </div>
-    </div>
-  </section>
 
-  <section class="section">
-    <h3 class="section-title">窗口效果</h3>
-    <div class="effect-grid">
-      {#each windowEffectOptions as opt}
-        <button
-          type="button"
-          class="effect-card"
-          class:active={windowEffect === opt.key}
-          aria-pressed={windowEffect === opt.key}
-          disabled={windowEffectSaving}
-          onclick={() => changeWindowEffect(opt.key)}
-        >
-          <span class="effect-name">{opt.label}</span>
-          <span class="effect-hint">{opt.hint}</span>
-          {#if windowEffect === opt.key}
-            <span class="effect-check" aria-hidden="true">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            </span>
-          {/if}
-        </button>
-      {/each}
-    </div>
-  </section>
+      <div class="mode-row">
+        <span class="mode-label">显示模式</span>
+        <div class="mode-segment" role="group" aria-label="明暗模式">
+          <button
+            type="button"
+            class="seg"
+            class:active={currentMode === "dark"}
+            aria-pressed={currentMode === "dark"}
+            onclick={() => setColorMode("dark")}
+          >深色</button>
+          <button
+            type="button"
+            class="seg"
+            class:active={currentMode === "light"}
+            aria-pressed={currentMode === "light"}
+            onclick={() => setColorMode("light")}
+          >浅色</button>
+        </div>
+      </div>
+    </section>
 
-  {#if loading}
+    <section class="section">
+      <h3 class="section-title">窗口效果</h3>
+      <div class="effect-grid">
+        {#each windowEffectOptions as opt}
+          <button
+            type="button"
+            class="effect-card"
+            class:active={windowEffect === opt.key}
+            aria-pressed={windowEffect === opt.key}
+            disabled={windowEffectSaving}
+            onclick={() => changeWindowEffect(opt.key)}
+          >
+            <span class="effect-name">{opt.label}</span>
+            <span class="effect-hint">{opt.hint}</span>
+            {#if windowEffect === opt.key}
+              <span class="effect-check" aria-hidden="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </span>
+            {/if}
+          </button>
+        {/each}
+      </div>
+    </section>
+  {:else if loading}
     <div class="status">加载中...</div>
-  {:else}
+  {:else if activeTab === "storage"}
+    {#if error}<div class="error-msg">{error}</div>{/if}
     <section class="section">
       <h3 class="section-title">内容缓存</h3>
       <p class="cache-desc">
@@ -324,7 +351,7 @@
         {#if cacheSaved}<span class="saved-hint">已保存</span>{/if}
       </div>
     </section>
-
+  {:else if activeTab === "model"}
     <form onsubmit={(e) => { e.preventDefault(); save(); }} class="form">
       {#if error}
         <div class="error-msg">{error}</div>
@@ -459,6 +486,37 @@
   .topbar-title {
     font-size: 15px;
     font-weight: 500;
+  }
+  /* 顶层类目导航 */
+  .nav-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 24px;
+    padding: 4px;
+    border-radius: var(--radius);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 0.5px solid var(--glass-border);
+    box-shadow: var(--elevation-1);
+  }
+  .nav-tab {
+    flex: 1;
+    padding: 10px 0;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .nav-tab:hover {
+    color: var(--text-strong);
+    background: var(--fill);
+  }
+  .nav-tab.active {
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 2px 12px color-mix(in srgb, var(--accent) 32%, transparent);
   }
   .form {
     display: flex;

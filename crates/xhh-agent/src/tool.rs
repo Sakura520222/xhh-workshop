@@ -3,11 +3,11 @@
 //! 设计：
 //! - [`Tool`] trait — 统一接口
 //! - [`ToolRegistry`] — 集中注册 + 按 name 查找
-//! - 22 个内置工具，覆盖帖子/评论/点赞/收藏/搜索/社区/用户/上传全部功能
+//! - 23 个内置工具，覆盖帖子/评论/点赞/收藏/搜索/社区/用户/上传全部功能
 //!
 //! 每个 Tool 接收 JSON 字符串参数，返回 JSON 字符串结果。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use async_trait::async_trait;
 use serde::Serialize;
@@ -93,7 +93,7 @@ impl ToolRegistry {
         }
     }
 
-    /// 注册全部内置工具（22 个）
+    /// 注册全部内置工具（23 个）
     pub fn with_defaults() -> Self {
         let mut reg = Self::new();
         // 查询类
@@ -120,6 +120,7 @@ impl ToolRegistry {
         reg.register(Box::new(CreateFavouriteFolderTool));
         reg.register(Box::new(DeleteFavouriteFolderTool));
         reg.register(Box::new(ListFavouriteLinksTool));
+        reg.register(Box::new(ListUncategorizedFavouriteLinksTool));
         reg.register(Box::new(MoveFavouriteTool));
         // 上传
         reg.register(Box::new(UploadImageTool));
@@ -917,31 +918,164 @@ impl Tool for ListFavouriteLinksTool {
             .and_then(|x| x.as_str())
             .map(String::from)
             .unwrap_or_default();
-        let list: Vec<Value> = links
-            .iter()
-            .map(|item| {
-                let l = item.get("link").cloned().unwrap_or(json!({}));
-                let topics: Vec<String> = l
-                    .get("topics")
-                    .and_then(|t| t.as_array())
-                    .map(|arr| {
-                        arr.iter()
-                            .filter_map(|t| t.get("name").and_then(|n| n.as_str()).map(String::from))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                json!({
-                    "link_id": l.get("linkid"),
-                    "title": l.get("title"),
-                    "description": l.get("description"),
-                    "topics": topics,
-                    "comment_num": l.get("comment_num"),
-                    "like_num": l.get("link_award_num"),
-                    "author": l.pointer("/user/username"),
-                })
-            })
-            .collect();
+        let list: Vec<Value> = links.iter().map(map_fav_link).collect();
         Ok(json!({"count": list.len(), "posts": list, "offset": offset, "has_next": has_next}).to_string())
+    }
+}
+
+/// JSON 值 → id 字符串（兼容数字/字符串）
+fn id_to_string(v: &Value) -> Option<String> {
+    match v {
+        Value::String(s) => Some(s.clone()),
+        Value::Number(n) => n.as_i64().map(|i| i.to_string()),
+        _ => None,
+    }
+}
+
+/// 解析 v2/links 响应的 has_next（兼容 "1"/1/true）
+fn fav_has_next(resp: &Value) -> bool {
+    match resp.pointer("/result/has_next") {
+        Some(Value::String(s)) => s == "1",
+        Some(Value::Number(n)) => n.as_i64() == Some(1),
+        Some(Value::Bool(b)) => *b,
+        _ => false,
+    }
+}
+
+/// 收藏项 → 精简结构
+fn map_fav_link(item: &Value) -> Value {
+    let l = item.get("link").cloned().unwrap_or(json!({}));
+    let topics: Vec<String> = l
+        .get("topics")
+        .and_then(|t| t.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|t| t.get("name").and_then(|n| n.as_str()).map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    json!({
+        "link_id": l.get("linkid"),
+        "title": l.get("title"),
+        "description": l.get("description"),
+        "topics": topics,
+        "comment_num": l.get("comment_num"),
+        "like_num": l.get("link_award_num"),
+        "author": l.pointer("/user/username"),
+    })
+}
+
+/// 查看未分类收藏（未归入任何自定义收藏夹的帖子）
+pub struct ListUncategorizedFavouriteLinksTool;
+
+#[async_trait]
+impl Tool for ListUncategorizedFavouriteLinksTool {
+    fn name(&self) -> &'static str {
+        "list_uncategorized_favourite_links"
+    }
+
+    fn spec(&self) -> ToolSpec {
+        ToolSpec::new(
+            "list_uncategorized_favourite_links",
+            "查看未归入任何自定义收藏夹的收藏帖子（“未分类”收藏）。内部逻辑：拉全部收藏 → 减去各自定义夹内容 → 差集。因需全量拉取，收藏量大时较慢。offset/limit 对最终差集做内存分页。",
+            json!({
+                "type": "object",
+                "properties": {
+                    "offset": {"type": "integer", "description": "（可选）结果分页偏移，默认 0"},
+                    "limit": {"type": "integer", "description": "（可选）返回数量，默认 30"}
+                }
+            }),
+        )
+    }
+
+    async fn execute(&self, client: &XhhClient, args_json: &str) -> Result<String> {
+        let v: Value = if args_json.is_empty() {
+            json!({})
+        } else {
+            serde_json::from_str(args_json).map_err(|e| Error::ToolCall {
+                tool: self.name().into(),
+                msg: format!("参数解析失败: {}", e),
+            })?
+        };
+        let offset = v.get("offset").and_then(|n| n.as_u64()).unwrap_or(0) as usize;
+        let limit = v.get("limit").and_then(|n| n.as_u64()).unwrap_or(30) as usize;
+
+        // 全量拉"全部收藏"
+        let mut all: Vec<Value> = Vec::new();
+        let mut off: u32 = 0;
+        loop {
+            let resp = api_inter::favourite_folder_links(client, None, off, 30).await?;
+            let links = resp
+                .pointer("/result/links")
+                .and_then(|a| a.as_array())
+                .cloned()
+                .unwrap_or_default();
+            let batch = links.len();
+            all.extend(links);
+            if !fav_has_next(&resp) || batch == 0 {
+                break;
+            }
+            off += batch as u32;
+        }
+
+        // 拉自定义夹列表
+        let folders_resp = api_inter::favourite_folders(client).await?;
+        let folder_ids: Vec<String> = folders_resp
+            .pointer("/result/folders")
+            .and_then(|a| a.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|f| f.get("id").and_then(id_to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        // 全量拉各自定义夹的 linkid，汇成已分类集合
+        let mut categorized: HashSet<String> = HashSet::new();
+        for fid in &folder_ids {
+            let mut fo: u32 = 0;
+            loop {
+                let resp = api_inter::favourite_folder_links(client, Some(fid.as_str()), fo, 30).await?;
+                let links = resp
+                    .pointer("/result/links")
+                    .and_then(|a| a.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                let batch = links.len();
+                for item in &links {
+                    if let Some(lid) = item.pointer("/link/linkid").and_then(id_to_string) {
+                        categorized.insert(lid);
+                    }
+                }
+                if !fav_has_next(&resp) || batch == 0 {
+                    break;
+                }
+                fo += batch as u32;
+            }
+        }
+
+        // 差集 + 分页 + 字段映射
+        let mut uncategorized: Vec<Value> = Vec::new();
+        for item in &all {
+            let is_cat = item
+                .pointer("/link/linkid")
+                .and_then(id_to_string)
+                .map(|lid| categorized.contains(lid.as_str()))
+                .unwrap_or(false);
+            if !is_cat {
+                uncategorized.push(map_fav_link(item));
+            }
+        }
+        let total = uncategorized.len();
+        let posts: Vec<Value> = uncategorized.into_iter().skip(offset).take(limit).collect();
+
+        Ok(json!({
+            "total_uncategorized": total,
+            "count": posts.len(),
+            "offset": offset,
+            "posts": posts
+        })
+        .to_string())
     }
 }
 
@@ -1791,16 +1925,17 @@ mod tests {
         assert!(names.contains(&"create_favourite_folder"));
         assert!(names.contains(&"delete_favourite_folder"));
         assert!(names.contains(&"list_favourite_links"));
+        assert!(names.contains(&"list_uncategorized_favourite_links"));
         assert!(names.contains(&"move_favourite"));
         // 上传
         assert!(names.contains(&"upload_image"));
-        assert_eq!(reg.names().len(), 22);
+        assert_eq!(reg.names().len(), 23);
     }
 
     #[test]
     fn specs_are_valid_json_schema() {
         let reg = ToolRegistry::with_defaults();
-        assert_eq!(reg.specs().len(), 22);
+        assert_eq!(reg.specs().len(), 23);
         for s in reg.specs() {
             assert!(!s.name.is_empty());
             assert!(s.parameters.is_object());
@@ -1863,5 +1998,13 @@ mod tests {
                 field
             );
         }
+    }
+
+    #[test]
+    fn id_to_string_handles_number_and_string() {
+        assert_eq!(id_to_string(&json!(100000011)), Some("100000011".into()));
+        assert_eq!(id_to_string(&json!("17447756")), Some("17447756".into()));
+        assert_eq!(id_to_string(&json!(null)), None);
+        assert_eq!(id_to_string(&json!({})), None);
     }
 }

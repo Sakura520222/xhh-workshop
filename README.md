@@ -14,7 +14,16 @@
 - **COS 上传** — 图片上传到小黑盒图床
 - **LLM Agent** — 多 Provider（OpenAI 兼容 / Claude / Ollama），17 个内置工具，自动发帖
 - **HTTP 服务** — 36 个 REST API 端点 + Swagger UI
-- **桌面客户端** — Tauri 2 + Svelte 5，毛玻璃 UI
+- **桌面客户端** — Tauri 2 + Svelte 5，毛玻璃 UI，支持 Windows / Linux
+
+## 下载
+
+从 [Releases](https://github.com/Sakura520222/xhh-workshop/releases) 获取对应平台的安装包：
+
+- **Windows**：`xhh-workshop_<版本>_x64-setup.exe` 安装版；`xhh-workshop_<版本>_x64_portable.exe` 便携版（需 Windows 10/11 自带 WebView2 运行时）
+- **Linux**：`xhh-workshop_<版本>_amd64.deb`（`sudo dpkg -i` 安装，依赖 webkit2gtk-4.1）；`xhh-workshop_<版本>_amd64.AppImage`（`chmod +x` 后直接运行）
+
+develop 分支的持续构建发布在 `nightly` 预发布标签。
 
 ## 技术栈
 
@@ -40,7 +49,8 @@ crates/
 
 - Rust 1.81+
 - Node.js 18+（桌面应用前端）
-- MSVC 构建工具（Windows）
+- Windows：MSVC 构建工具（WebView2 运行时系统自带）
+- Linux：libwebkit2gtk-4.1-dev、libgtk-3-dev、libayatana-appindicator3-dev、librsvg2-dev、patchelf（构建桌面应用）
 
 ### 构建
 
@@ -115,21 +125,24 @@ cargo build -p xhh-http --release
 
 Release profile 已配置 LTO + strip，输出为独立可执行文件，无需运行时依赖。
 
-### 桌面应用（NSIS 安装包）
+### 桌面应用（安装包）
 
 ```bash
 cd crates/xhh-app
 cargo tauri build
 ```
 
-输出位于 `target/release/bundle/nsis/`，生成 `.exe` 安装程序。
+输出位于 `target/release/bundle/`，按构建平台生成：Windows 为 NSIS 安装包（`nsis/*-setup.exe`），Linux 为 deb 与 AppImage（`deb/`、`appimage/`）。
 
 ## 配置
 
-| 文件 | 路径 | 用途 |
-|---|---|---|
-| 登录凭据 | `%APPDATA%\xhh\config.json` | pkey / heybox_id |
-| Agent 配置 | `%APPDATA%\xhh\agent.json` | Provider 等 |
+配置目录：Windows `%APPDATA%\xhh\`，Linux `~/.config/xhh/`，macOS `~/Library/Application Support/xhh/`。
+
+| 文件 | 用途 |
+|---|---|
+| `config.json` | 登录凭据（pkey / heybox_id 等） |
+| `agent.json` | Agent Provider / 配额等 |
+| `agent_counters.json` | 每日配额计数器 |
 
 ## License
 

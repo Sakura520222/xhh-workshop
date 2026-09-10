@@ -2,6 +2,7 @@ name: Release
 
 # main 推送：按 tauri.conf.json 的 version 自动打 tag 并发正式版（同版本已发则跳过）
 # develop 推送：持续更新 nightly 预发布版
+# 双平台构建：Windows（NSIS + 便携 exe）与 Linux（deb + AppImage），产物命名 xhh-workshop_<版本>_<平台>
 on:
   push:
     branches:
@@ -13,9 +14,15 @@ permissions:
   contents: write
 
 jobs:
-  build-windows:
-    name: Build (Windows x64)
-    runs-on: windows-latest
+  meta:
+    name: Compute release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.meta.outputs.skip }}
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+      name: ${{ steps.meta.outputs.name }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -52,16 +59,22 @@ jobs:
             echo "prerelease=true" >> "$GITHUB_OUTPUT"
           fi
 
+  build-windows:
+    name: Build (Windows x64)
+    needs: meta
+    if: needs.meta.outputs.skip != 'true'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Install Rust stable
-        if: steps.meta.outputs.skip != 'true'
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust build
-        if: steps.meta.outputs.skip != 'true'
         uses: swatinem/rust-cache@v2
 
       - name: Setup Node.js
-        if: steps.meta.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -69,27 +82,24 @@ jobs:
           cache-dependency-path: crates/xhh-app/frontend/package-lock.json
 
       - name: Install frontend dependencies
-        if: steps.meta.outputs.skip != 'true'
         run: npm ci
         working-directory: crates/xhh-app/frontend
 
       - name: Build app
-        if: steps.meta.outputs.skip != 'true'
         uses: tauri-apps/tauri-action@v0
         with:
           projectPath: crates/xhh-app
 
       - name: Collect and rename artifacts
-        if: steps.meta.outputs.skip != 'true'
         shell: bash
         run: |
-          version="${{ steps.meta.outputs.version }}"
+          version="${{ needs.meta.outputs.version }}"
           installer=$(find target/release/bundle/nsis -name "*-setup.exe" | head -1)
           if [ -z "$installer" ]; then
             echo "::error::未找到 NSIS 安装包"
             exit 1
           fi
-          cp "$installer" "黑盒工坊_${version}_x64-setup.exe"
+          cp "$installer" "xhh-workshop_${version}_x64-setup.exe"
           exe=""
           for name in xhh-workshop xhh-app; do
             if [ -f "target/release/$name.exe" ]; then
@@ -102,22 +112,82 @@ jobs:
             ls -la target/release/*.exe 2>/dev/null || true
             exit 1
           fi
-          cp "$exe" "黑盒工坊_${version}_x64_portable.exe"
+          cp "$exe" "xhh-workshop_${version}_x64_portable.exe"
 
       - name: Publish release
-        if: steps.meta.outputs.skip != 'true'
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ steps.meta.outputs.tag }}
-          name: ${{ steps.meta.outputs.name }}
+          tag_name: ${{ needs.meta.outputs.tag }}
+          name: ${{ needs.meta.outputs.name }}
           body: |
-            安装版：运行 `*-setup.exe` 完成安装。
-            便携版：双击 `*_portable.exe` 免安装运行（需 Windows 10/11 自带 WebView2 运行时）。
+            Windows 安装版：运行 `xhh-workshop_<版本>_x64-setup.exe` 完成安装。
+            Windows 便携版：双击 `xhh-workshop_<版本>_x64_portable.exe` 免安装运行（需 Windows 10/11 自带 WebView2 运行时）。
+            Linux deb：`sudo dpkg -i xhh-workshop_<版本>_amd64.deb`（依赖 webkit2gtk-4.1）。
+            Linux AppImage：`chmod +x xhh-workshop_<版本>_amd64.AppImage` 后直接运行。
 
             详情与使用说明见 [README](https://github.com/Sakura520222/xhh-workshop#readme)。
-          prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
+          prerelease: ${{ needs.meta.outputs.prerelease == 'true' }}
           files: |
-            黑盒工坊_*_x64-setup.exe
-            黑盒工坊_*_x64_portable.exe
+            xhh-workshop_*_x64-setup.exe
+            xhh-workshop_*_x64_portable.exe
+
+  build-linux:
+    name: Build (Linux x64)
+    needs: [meta, build-windows]
+    if: needs.meta.outputs.skip != 'true'
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: crates/xhh-app/frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: crates/xhh-app/frontend
+
+      - name: Build app
+        uses: tauri-apps/tauri-action@v0
+        with:
+          projectPath: crates/xhh-app
+
+      - name: Collect and rename artifacts
+        run: |
+          version="${{ needs.meta.outputs.version }}"
+          deb=$(find target/release/bundle/deb -name "*.deb" | head -1)
+          appimage=$(find target/release/bundle/appimage -name "*.AppImage" | head -1)
+          if [ -z "$deb" ] || [ -z "$appimage" ]; then
+            echo "::error::未找到 deb 或 AppImage 产物"
+            ls -R target/release/bundle 2>/dev/null || true
+            exit 1
+          fi
+          cp "$deb" "xhh-workshop_${version}_amd64.deb"
+          cp "$appimage" "xhh-workshop_${version}_amd64.AppImage"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.meta.outputs.tag }}
+          files: |
+            xhh-workshop_*_amd64.deb
+            xhh-workshop_*_amd64.AppImage

@@ -44,10 +44,8 @@
     padding: 12px 14px;
     border-radius: var(--radius);
     background: var(--surface-strong);
-    border: 1px solid var(--glass-border);
+    border: 1px solid var(--border);
     box-shadow: var(--elevation-2);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
     animation: toast-in var(--duration-normal) var(--ease-out);
   }
   .toast.info { border-left: 3px solid var(--accent); }

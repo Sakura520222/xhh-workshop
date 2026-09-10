@@ -247,19 +247,9 @@
     top: 8px;
     z-index: 10;
     border-radius: 22px;
-    background: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.22) 0%,
-      rgba(255, 255, 255, 0.10) 100%
-    );
-    backdrop-filter: blur(40px) saturate(1.8) brightness(1.1);
-    -webkit-backdrop-filter: blur(40px) saturate(1.8) brightness(1.1);
-    border: 0.5px solid rgba(255, 255, 255, 0.35);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.6),
-      inset 0 -0.5px 0 rgba(255, 255, 255, 0.15),
-      0 8px 40px rgba(0, 0, 0, 0.10),
-      0 2px 12px rgba(0, 0, 0, 0.06);
+    background: var(--panel-bg);
+    border: 0.5px solid var(--border);
+    box-shadow: var(--elevation-2);
   }
   .back-btn {
     padding: 6px 14px;
@@ -282,12 +272,10 @@
     display: flex;
     gap: 20px;
     padding: 24px;
-    background: var(--glass-bg);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
+    background: var(--panel-bg);
     border-radius: var(--radius);
     margin-bottom: 20px;
-    border: 0.5px solid var(--glass-border);
+    border: 0.5px solid var(--border);
     box-shadow: var(--elevation-1);
   }
   .avatar {
@@ -335,9 +323,7 @@
     gap: 12px;
   }
   .stat {
-    background: var(--glass-bg);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
+    background: var(--panel-bg);
     border-radius: var(--radius);
     padding: 20px;
     text-align: center;
@@ -345,12 +331,12 @@
     border: none;
     color: var(--text);
     width: 100%;
-    border: 0.5px solid var(--glass-border);
+    border: 0.5px solid var(--border);
     box-shadow: var(--elevation-1);
     transition: all var(--duration-normal) var(--ease-out);
   }
   .stat:hover {
-    background: var(--glass-hover);
+    background: var(--panel-hover);
     border-color: rgba(255, 255, 255, 0.12);
     box-shadow: var(--elevation-2);
   }
@@ -359,8 +345,8 @@
     opacity: 0.5;
   }
   .stat.inactive:hover {
-    background: var(--glass-bg);
-    border-color: var(--glass-border);
+    background: var(--panel-bg);
+    border-color: var(--border);
     box-shadow: var(--elevation-1);
   }
   .num {
@@ -383,13 +369,13 @@
     gap: 12px;
     padding: 14px 16px;
     border-radius: var(--radius);
-    background: var(--glass-bg);
-    border: 0.5px solid var(--glass-border);
+    background: var(--panel-bg);
+    border: 0.5px solid var(--border);
     box-shadow: var(--elevation-1);
     transition: all var(--duration-normal) var(--ease-out);
   }
   .user-item:hover {
-    background: var(--glass-hover);
+    background: var(--panel-hover);
     border-color: rgba(255, 255, 255, 0.12);
   }
   .u-avatar {

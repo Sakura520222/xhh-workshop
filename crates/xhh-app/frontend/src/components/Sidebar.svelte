@@ -110,9 +110,7 @@
     gap: 14px;
     padding: 18px 14px;
     border-right: 1px solid rgba(148, 163, 184, 0.14);
-    background: linear-gradient(180deg, color-mix(in srgb, var(--bg) 90%, transparent) 0%, color-mix(in srgb, var(--bg-soft) 76%, transparent) 100%);
-    backdrop-filter: blur(28px) saturate(1.35);
-    -webkit-backdrop-filter: blur(28px) saturate(1.35);
+    background: linear-gradient(180deg, var(--bg) 0%, var(--bg-soft) 100%);
   }
 
   /* 云母/亚克力：降低背景不透明度，让底层效果透过 */

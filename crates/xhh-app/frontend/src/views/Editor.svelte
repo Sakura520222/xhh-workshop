@@ -563,11 +563,9 @@
     padding: 14px;
     margin-bottom: 18px;
     border-radius: 24px;
-    background: color-mix(in srgb, var(--bg) 76%, transparent);
+    background: var(--panel-bg);
     border: 1px solid rgba(148, 163, 184, 0.16);
     box-shadow: var(--elevation-1);
-    backdrop-filter: blur(28px) saturate(1.4);
-    -webkit-backdrop-filter: blur(28px) saturate(1.4);
   }
 
   .eyebrow,
@@ -650,10 +648,8 @@
   .publish-card {
     border-radius: 28px;
     background: linear-gradient(180deg, color-mix(in srgb, var(--bg-soft) 76%, transparent), color-mix(in srgb, var(--bg-soft) 57%, transparent));
-    border: 1px solid var(--glass-border);
+    border: 1px solid var(--border);
     box-shadow: var(--elevation-1);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
   }
 
   .compose-card {
@@ -741,10 +737,9 @@
     display: grid;
     place-items: center;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--bg) 76%, transparent);
+    background: var(--panel-bg);
     border: 1px solid rgba(255, 255, 255, 0.14);
     color: var(--text-strong);
-    backdrop-filter: blur(10px);
   }
 
   .compose-actions {
@@ -786,10 +781,8 @@
     display: flex;
     flex-direction: column;
     border-radius: var(--radius);
-    background: var(--glass-bg);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
-    border: 0.5px solid var(--glass-border);
+    background: var(--panel-bg);
+    border: 0.5px solid var(--border);
     box-shadow: var(--elevation-1);
     overflow: hidden;
   }
@@ -800,7 +793,7 @@
     padding: 16px 18px;
     font-size: 16px;
     font-weight: 700;
-    border-bottom: 0.5px solid var(--glass-border);
+    border-bottom: 0.5px solid var(--border);
   }
   .drafts-close {
     padding: 4px 12px;

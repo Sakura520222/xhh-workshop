@@ -130,11 +130,9 @@
     overflow: hidden;
     width: min(400px, 100%);
     border-radius: 30px;
-    border: 1px solid var(--glass-border);
+    border: 1px solid var(--border);
     background: linear-gradient(180deg, color-mix(in srgb, var(--bg-soft) 78%, transparent), color-mix(in srgb, var(--bg-soft) 57%, transparent));
     box-shadow: var(--elevation-3);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
     padding: 44px 36px;
     display: flex;
     flex-direction: column;
@@ -253,9 +251,7 @@
     justify-content: center;
     gap: 16px;
     border-radius: 24px;
-    background: color-mix(in srgb, var(--bg-soft) 72%, transparent);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    background: var(--bg-soft);
     animation: overlay-in 280ms var(--ease-out);
   }
 
@@ -301,7 +297,7 @@
   }
 
   .refresh-btn {
-    border: 1px solid var(--glass-border);
+    border: 1px solid var(--border);
     background: color-mix(in srgb, var(--bg-soft) 40%, transparent);
     color: var(--text-strong);
   }

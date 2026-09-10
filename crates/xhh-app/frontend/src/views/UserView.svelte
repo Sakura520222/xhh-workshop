@@ -142,10 +142,8 @@
     gap: 14px;
     padding: 16px;
     border-radius: var(--radius);
-    background: var(--glass-bg);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
-    border: 0.5px solid var(--glass-border);
+    background: var(--panel-bg);
+    border: 0.5px solid var(--border);
     box-shadow: var(--elevation-1);
     margin-bottom: 20px;
   }
@@ -188,8 +186,8 @@
   }
   .follow-btn.followed {
     opacity: 0.6;
-    background: var(--glass-bg);
-    border-color: var(--glass-border);
+    background: var(--panel-bg);
+    border-color: var(--border);
     box-shadow: none;
   }
   .section-title {
@@ -205,14 +203,14 @@
   .post-item {
     padding: 14px 16px;
     border-radius: var(--radius);
-    background: var(--glass-bg);
-    border: 0.5px solid var(--glass-border);
+    background: var(--panel-bg);
+    border: 0.5px solid var(--border);
     box-shadow: var(--elevation-1);
     cursor: pointer;
     transition: all var(--duration-normal) var(--ease-out);
   }
   .post-item:hover {
-    background: var(--glass-hover);
+    background: var(--panel-hover);
     border-color: rgba(255, 255, 255, 0.12);
   }
   .post-title {
@@ -239,14 +237,14 @@
     margin: 16px auto;
     padding: 8px 24px;
     border-radius: 10px;
-    background: var(--glass-bg);
-    border: 0.5px solid var(--glass-border);
+    background: var(--panel-bg);
+    border: 0.5px solid var(--border);
     color: var(--text);
     font-size: 13px;
     transition: all var(--duration-fast) var(--ease-out);
   }
   .load-more:hover:not(:disabled) {
-    background: var(--glass-hover);
+    background: var(--panel-hover);
     border-color: rgba(255, 255, 255, 0.12);
   }
   .load-more:disabled {

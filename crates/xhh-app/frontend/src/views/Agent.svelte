@@ -960,10 +960,8 @@
       radial-gradient(circle at 14% 8%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 34%),
       radial-gradient(circle at 86% 16%, color-mix(in srgb, var(--accent-warm) 12%, transparent), transparent 30%),
       linear-gradient(135deg, color-mix(in srgb, var(--bg-soft) 86%, transparent), color-mix(in srgb, var(--bg-soft) 57%, transparent));
-    border: 1px solid var(--glass-border);
+    border: 1px solid var(--border);
     box-shadow: var(--elevation-2);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
   }
 
   .hero-copy {
@@ -1040,10 +1038,8 @@
     overflow: hidden;
     border-radius: 28px;
     background: linear-gradient(180deg, color-mix(in srgb, var(--bg-soft) 76%, transparent), color-mix(in srgb, var(--bg-soft) 57%, transparent));
-    border: 1px solid var(--glass-border);
+    border: 1px solid var(--border);
     box-shadow: var(--elevation-2);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
   }
 
   .chat-toolbar {
@@ -1391,8 +1387,6 @@
     place-items: center;
     padding: 24px;
     background: var(--scrim);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
     overscroll-behavior: contain;
     animation: backdrop-in 180ms var(--ease-out);
   }

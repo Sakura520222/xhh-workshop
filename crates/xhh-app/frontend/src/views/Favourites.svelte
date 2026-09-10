@@ -348,19 +348,9 @@
     top: 8px;
     z-index: 10;
     border-radius: 22px;
-    background: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.22) 0%,
-      rgba(255, 255, 255, 0.10) 100%
-    );
-    backdrop-filter: blur(40px) saturate(1.8) brightness(1.1);
-    -webkit-backdrop-filter: blur(40px) saturate(1.8) brightness(1.1);
-    border: 0.5px solid rgba(255, 255, 255, 0.35);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.6),
-      inset 0 -0.5px 0 rgba(255, 255, 255, 0.15),
-      0 8px 40px rgba(0, 0, 0, 0.10),
-      0 2px 12px rgba(0, 0, 0, 0.06);
+    background: var(--panel-bg);
+    border: 0.5px solid var(--border);
+    box-shadow: var(--elevation-2);
   }
   .back-btn {
     padding: 6px 14px;
@@ -425,13 +415,13 @@
     cursor: pointer;
     padding: 16px 18px;
     border-radius: var(--radius);
-    background: var(--glass-bg);
-    border: 0.5px solid var(--glass-border);
+    background: var(--panel-bg);
+    border: 0.5px solid var(--border);
     box-shadow: var(--elevation-1);
     transition: all var(--duration-normal) var(--ease-out);
   }
   .folder-item:hover {
-    background: var(--glass-hover);
+    background: var(--panel-hover);
     border-color: rgba(255, 255, 255, 0.12);
   }
   .folder-name {
@@ -480,10 +470,8 @@
     max-width: 360px;
     padding: 22px;
     border-radius: var(--radius);
-    background: var(--glass-bg);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
-    border: 0.5px solid var(--glass-border);
+    background: var(--panel-bg);
+    border: 0.5px solid var(--border);
     box-shadow: var(--elevation-1);
   }
   .confirm-text {
@@ -528,14 +516,14 @@
   .post-item {
     padding: 14px 16px;
     border-radius: var(--radius);
-    background: var(--glass-bg);
-    border: 0.5px solid var(--glass-border);
+    background: var(--panel-bg);
+    border: 0.5px solid var(--border);
     box-shadow: var(--elevation-1);
     cursor: pointer;
     transition: all var(--duration-normal) var(--ease-out);
   }
   .post-item:hover {
-    background: var(--glass-hover);
+    background: var(--panel-hover);
     border-color: rgba(255, 255, 255, 0.12);
   }
   .post-title {

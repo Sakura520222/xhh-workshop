@@ -228,7 +228,7 @@
     border-radius: 999px;
     background: var(--fill);
     color: var(--text);
-    border: 0.5px solid var(--glass-border);
+    border: 0.5px solid var(--border);
     font-size: 13px;
     transition: all var(--duration-fast) var(--ease-out);
   }
@@ -242,7 +242,7 @@
     border-radius: 14px;
     background: var(--fill);
     color: var(--text);
-    border: 0.5px solid var(--glass-border);
+    border: 0.5px solid var(--border);
     font-size: 14px;
     outline: none;
     transition: all var(--duration-fast) var(--ease-out);
@@ -256,7 +256,7 @@
     border-radius: 14px;
     background: var(--fill);
     color: var(--text);
-    border: 0.5px solid var(--glass-border);
+    border: 0.5px solid var(--border);
     font-size: 13px;
     outline: none;
     transition: all var(--duration-fast) var(--ease-out);
@@ -291,14 +291,14 @@
   .result-item {
     padding: 14px 16px;
     border-radius: var(--radius);
-    background: var(--glass-bg);
-    border: 0.5px solid var(--glass-border);
+    background: var(--panel-bg);
+    border: 0.5px solid var(--border);
     box-shadow: var(--elevation-1);
     font-size: 14px;
     transition: all var(--duration-normal) var(--ease-out);
   }
   .result-item:hover {
-    background: var(--glass-hover);
+    background: var(--panel-hover);
     border-color: rgba(255, 255, 255, 0.12);
   }
   .user-item {

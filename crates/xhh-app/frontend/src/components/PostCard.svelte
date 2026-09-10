@@ -96,11 +96,9 @@
     position: relative;
     overflow: hidden;
     background: linear-gradient(180deg, color-mix(in srgb, var(--bg-soft) 76%, transparent), color-mix(in srgb, var(--bg-soft) 57%, transparent));
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
     border-radius: var(--radius-lg);
     padding: 18px;
-    border: 1px solid var(--glass-border);
+    border: 1px solid var(--border);
     box-shadow: var(--elevation-1);
     transition: transform var(--duration-normal) var(--ease-out), border-color var(--duration-normal) var(--ease-out), box-shadow var(--duration-normal) var(--ease-out), background var(--duration-normal) var(--ease-out);
   }

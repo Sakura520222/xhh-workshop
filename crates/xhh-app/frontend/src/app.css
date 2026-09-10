@@ -36,10 +36,8 @@
 
   --border: rgba(148, 163, 184, 0.18);
   --border-strong: rgba(203, 213, 225, 0.28);
-  --glass-bg: rgba(15, 23, 42, 0.68);
-  --glass-border: rgba(148, 163, 184, 0.18);
-  --glass-hover: rgba(30, 41, 59, 0.82);
-  --glass-blur: blur(24px) saturate(1.45);
+  --panel-bg: #0e1627;
+  --panel-hover: #1b2536;
 
   --glow-1: #3b82f6;
   --glow-2: #f97316;
@@ -110,8 +108,8 @@
   --accent-warm: #64748b;
   --accent-warm-soft: rgba(100, 116, 139, 0.18);
 
-  --glass-bg: rgba(18, 20, 25, 0.68);
-  --glass-hover: rgba(32, 35, 41, 0.82);
+  --panel-bg: #121418;
+  --panel-hover: #1d2026;
 
   --glow-1: #475569;
   --glow-2: #64748b;
@@ -137,8 +135,8 @@
   --accent-warm: #84cc16;
   --accent-warm-soft: rgba(132, 204, 22, 0.18);
 
-  --glass-bg: rgba(8, 28, 18, 0.68);
-  --glass-hover: rgba(14, 40, 26, 0.82);
+  --panel-bg: #091c12;
+  --panel-hover: #0d2619;
 
   --glow-1: #10b981;
   --glow-2: #84cc16;
@@ -164,8 +162,8 @@
   --accent-warm: #ec4899;
   --accent-warm-soft: rgba(236, 72, 153, 0.18);
 
-  --glass-bg: rgba(20, 15, 35, 0.68);
-  --glass-hover: rgba(34, 24, 54, 0.82);
+  --panel-bg: #140f22;
+  --panel-hover: #201732;
 
   --glow-1: #8b5cf6;
   --glow-2: #ec4899;
@@ -191,8 +189,8 @@
   --accent-warm: #fb923c;
   --accent-warm-soft: rgba(251, 146, 60, 0.18);
 
-  --glass-bg: rgba(32, 14, 21, 0.68);
-  --glass-hover: rgba(52, 24, 33, 0.82);
+  --panel-bg: #1f0f16;
+  --panel-hover: #30171f;
 
   --glow-1: #f43f5e;
   --glow-2: #fb923c;
@@ -218,8 +216,8 @@
   --accent-warm: #f97316;
   --accent-warm-soft: rgba(249, 115, 22, 0.18);
 
-  --glass-bg: rgba(30, 21, 10, 0.68);
-  --glass-hover: rgba(50, 36, 18, 0.82);
+  --panel-bg: #1d150a;
+  --panel-hover: #2e2111;
 
   --glow-1: #f59e0b;
   --glow-2: #f97316;
@@ -266,10 +264,8 @@
 
   --border: rgba(15, 23, 42, 0.1);
   --border-strong: rgba(15, 23, 42, 0.18);
-  --glass-bg: rgba(255, 255, 255, 0.72);
-  --glass-border: rgba(15, 23, 42, 0.08);
-  --glass-hover: rgba(241, 245, 249, 0.86);
-  --glass-blur: blur(24px) saturate(1.35);
+  --panel-bg: #f7f9fb;
+  --panel-hover: #eff3f8;
 
   --glow-1: #60a5fa;
   --glow-2: #fb923c;

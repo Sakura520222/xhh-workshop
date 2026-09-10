@@ -135,16 +135,14 @@
     place-items: center;
     padding: 24px;
     background: var(--scrim);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
     animation: backdrop-in 160ms var(--ease-out);
   }
 
   .dialog {
     width: min(520px, 100%);
     border-radius: 22px;
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
     box-shadow: 0 24px 60px rgba(0, 0, 0, 0.42);
     overflow: hidden;
     animation: dialog-in 220ms var(--ease-out);
@@ -179,7 +177,7 @@
     border-radius: 12px;
     background: var(--fill-hover);
     color: var(--text);
-    border: 1px solid var(--glass-border);
+    border: 1px solid var(--border);
     font-size: 13px;
     outline: none;
     transition: border-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);

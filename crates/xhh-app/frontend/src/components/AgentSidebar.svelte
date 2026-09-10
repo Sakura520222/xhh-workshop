@@ -268,9 +268,7 @@
     min-height: 0;
     padding: 12px 10px 10px;
     border-right: 1px solid rgba(148, 163, 184, 0.16);
-    background: color-mix(in srgb, var(--bg-soft) 70%, transparent);
-    backdrop-filter: blur(18px) saturate(1.3);
-    -webkit-backdrop-filter: blur(18px) saturate(1.3);
+    background: var(--bg-soft);
   }
 
   .sidebar-top {
@@ -587,16 +585,14 @@
     display: grid;
     place-items: center;
     background: var(--scrim);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
   }
 
   .confirm-dialog {
     width: min(360px, 92vw);
     padding: 22px;
     border-radius: 18px;
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
     box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
   }
 

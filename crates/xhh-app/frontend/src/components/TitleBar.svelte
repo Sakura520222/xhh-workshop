@@ -32,9 +32,7 @@
     -webkit-app-region: drag;
     user-select: none;
     border-bottom: 1px solid rgba(148, 163, 184, 0.14);
-    background: color-mix(in srgb, var(--bg) 82%, transparent);
-    backdrop-filter: blur(24px) saturate(1.45);
-    -webkit-backdrop-filter: blur(24px) saturate(1.45);
+    background: var(--bg);
   }
 
   /* 云母/亚克力：降低背景不透明度，让底层效果透过 */

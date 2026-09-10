@@ -1205,19 +1205,9 @@
     top: 8px;
     z-index: 10;
     border-radius: 22px;
-    background: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.22) 0%,
-      rgba(255, 255, 255, 0.10) 100%
-    );
-    backdrop-filter: blur(40px) saturate(1.8) brightness(1.1);
-    -webkit-backdrop-filter: blur(40px) saturate(1.8) brightness(1.1);
-    border: 0.5px solid rgba(255, 255, 255, 0.35);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.6),
-      inset 0 -0.5px 0 rgba(255, 255, 255, 0.15),
-      0 8px 40px rgba(0, 0, 0, 0.10),
-      0 2px 12px rgba(0, 0, 0, 0.06);
+    background: var(--panel-bg);
+    border: 0.5px solid var(--border);
+    box-shadow: var(--elevation-2);
   }
   .back-btn {
     padding: 6px 14px;
@@ -1237,13 +1227,11 @@
     font-weight: 500;
   }
   .post {
-    background: var(--glass-bg);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
+    background: var(--panel-bg);
     border-radius: var(--radius);
     padding: 20px;
     margin-bottom: 20px;
-    border: 0.5px solid var(--glass-border);
+    border: 0.5px solid var(--border);
     box-shadow: var(--elevation-1);
   }
   .post-author {
@@ -1420,10 +1408,8 @@
     max-width: 360px;
     padding: 22px;
     border-radius: var(--radius);
-    background: var(--glass-bg);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
-    border: 0.5px solid var(--glass-border);
+    background: var(--panel-bg);
+    border: 0.5px solid var(--border);
     box-shadow: var(--elevation-1);
   }
   .confirm-text {
@@ -1461,7 +1447,7 @@
     align-items: center;
     gap: 16px;
     padding-top: 12px;
-    border-top: 0.5px solid var(--glass-border);
+    border-top: 0.5px solid var(--border);
   }
   .action-btn {
     padding: 6px 16px;
@@ -1497,12 +1483,10 @@
     gap: 16px;
   }
   .floor {
-    background: var(--glass-bg);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
+    background: var(--panel-bg);
     border-radius: var(--radius);
     padding: 14px 16px;
-    border: 0.5px solid var(--glass-border);
+    border: 0.5px solid var(--border);
     box-shadow: var(--elevation-1);
   }
   .comment {
@@ -1513,7 +1497,7 @@
     margin-top: 12px;
     margin-left: 38px;
     padding-top: 12px;
-    border-top: 0.5px solid var(--glass-border);
+    border-top: 0.5px solid var(--border);
   }
   .c-avatar {
     width: 32px;
@@ -1608,19 +1592,9 @@
    margin: 0 auto;
     padding: 14px 16px;
     border-radius: 100px;
-    background: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.18) 0%,
-      var(--fill-strong) 100%
-    );
-    backdrop-filter: blur(40px) saturate(1.8) brightness(1.05);
-    -webkit-backdrop-filter: blur(40px) saturate(1.8) brightness(1.05);
-    border: 0.5px solid rgba(255, 255, 255, 0.2);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.5),
-      inset 0 -0.5px 0 var(--hairline-soft),
-      0 8px 40px rgba(0, 0, 0, 0.12),
-      0 2px 12px rgba(0, 0, 0, 0.06);
+    background: var(--panel-bg);
+    border: 0.5px solid var(--border);
+    box-shadow: var(--elevation-2);
     z-index: 100;
   }
   .reply-hint {
@@ -1838,11 +1812,9 @@
    padding: 20px;
  }
   .ai-panel {
-    background: var(--glass-bg);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
+    background: var(--panel-bg);
     border-radius: var(--radius);
-    border: 0.5px solid var(--glass-border);
+    border: 0.5px solid var(--border);
     box-shadow: var(--elevation-1);
     padding: 16px 18px;
     width: 100%;
@@ -1867,7 +1839,7 @@
     justify-content: space-between;
     margin-bottom: 14px;
     padding-bottom: 10px;
-    border-bottom: 0.5px solid var(--glass-border);
+    border-bottom: 0.5px solid var(--border);
   }
   .ai-title {
     font-size: 14px;
@@ -1896,7 +1868,7 @@
     padding: 4px 10px;
     border-radius: 8px;
     background: var(--fill-hover);
-    border: 0.5px solid var(--glass-border);
+    border: 0.5px solid var(--border);
     transition: all var(--duration-fast) var(--ease-out);
   }
   .ai-close:hover {
@@ -2220,7 +2192,7 @@
     padding: 12px 14px;
     border-radius: 10px;
     background: var(--fill-hover);
-    border: 0.5px solid var(--glass-border);
+    border: 0.5px solid var(--border);
     color: var(--text-secondary);
     font-size: 13px;
     line-height: 1.5;
@@ -2240,7 +2212,7 @@
     padding: 5px 14px;
     border-radius: 8px;
     background: var(--fill-hover);
-    border: 0.5px solid var(--glass-border);
+    border: 0.5px solid var(--border);
     transition: all var(--duration-fast) var(--ease-out);
   }
   .ai-retry:hover {
@@ -2254,7 +2226,7 @@
     font-size: 12px;
     color: var(--text-secondary);
     background: var(--fill);
-    border: 0.5px solid var(--glass-border);
+    border: 0.5px solid var(--border);
     transition: all var(--duration-fast) var(--ease-out);
   }
   .ai-back-btn:hover {
@@ -2303,7 +2275,7 @@
     padding: 11px 14px;
     border-radius: 10px;
     background: var(--fill-hover);
-    border: 0.5px solid var(--glass-border);
+    border: 0.5px solid var(--border);
     font-size: 13px;
     transition: all var(--duration-fast) var(--ease-out);
     text-align: left;
@@ -2336,14 +2308,14 @@
     gap: 8px;
     margin-top: 4px;
     padding-top: 10px;
-    border-top: 0.5px solid var(--glass-border);
+    border-top: 0.5px solid var(--border);
   }
   .fav-input {
     flex: 1;
     padding: 8px 12px;
     border-radius: 10px;
     background: var(--fill-hover);
-    border: 0.5px solid var(--glass-border);
+    border: 0.5px solid var(--border);
     color: var(--text);
     font-size: 13px;
     outline: none;

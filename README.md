@@ -14,7 +14,7 @@
 - **COS 上传** — 图片上传到小黑盒图床
 - **LLM Agent** — 多 Provider（OpenAI 兼容 / Claude / Ollama），17 个内置工具，自动发帖
 - **HTTP 服务** — 36 个 REST API 端点 + Swagger UI
-- **桌面客户端** — Tauri 2 + Svelte 5，毛玻璃 UI，支持 Windows / Linux
+- **桌面客户端** — Tauri 2 + Svelte 5，支持 Windows / Linux
 
 ## 下载
 

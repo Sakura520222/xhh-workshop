@@ -298,9 +298,7 @@
     z-index: 10;
     padding: 10px;
     border-radius: 24px;
-    background: color-mix(in srgb, var(--bg) 76%, transparent);
-    backdrop-filter: blur(28px) saturate(1.4);
-    -webkit-backdrop-filter: blur(28px) saturate(1.4);
+    background: var(--panel-bg);
     border: 1px solid rgba(148, 163, 184, 0.16);
     box-shadow: var(--elevation-1);
   }
@@ -454,7 +452,7 @@
     padding: 18px;
     border-radius: var(--radius-lg);
     background: linear-gradient(180deg, color-mix(in srgb, var(--bg-soft) 76%, transparent), color-mix(in srgb, var(--bg-soft) 57%, transparent));
-    border: 1px solid var(--glass-border);
+    border: 1px solid var(--border);
     box-shadow: var(--elevation-1);
     font-size: 14px;
     transition: all var(--duration-normal) var(--ease-out);

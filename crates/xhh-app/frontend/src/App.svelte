@@ -158,10 +158,8 @@
     padding: 18px 20px;
     border-radius: var(--radius-lg);
     background: var(--surface);
-    border: 1px solid var(--glass-border);
+    border: 1px solid var(--border);
     box-shadow: var(--elevation-2);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
   }
 
   .loader {

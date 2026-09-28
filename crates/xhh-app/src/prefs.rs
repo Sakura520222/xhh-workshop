@@ -29,6 +29,10 @@ fn prefs_path() -> PathBuf {
 }
 
 pub fn load_effect() -> WindowEffect {
+    // 窗口效果仅 Windows 支持实际渲染，其余平台一律 None
+    if !cfg!(target_os = "windows") {
+        return WindowEffect::None;
+    }
     match std::fs::read(prefs_path()) {
         Ok(bytes) => serde_json::from_slice::<PrefsFile>(&bytes)
             .map(|p| p.window_effect)

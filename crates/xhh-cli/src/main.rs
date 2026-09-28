@@ -580,7 +580,11 @@ async fn handle_agent(cmd: AgentCmd, _cfg_path: &Option<PathBuf>) -> Result<()> 
             println!("Anthropic 配置已保存");
         }
 
-        AgentCmd::SetOllama { model, base_url, timeout } => {
+        AgentCmd::SetOllama {
+            model,
+            base_url,
+            timeout,
+        } => {
             ac.ollama = Some(OllamaCfg {
                 model,
                 base_url,

@@ -267,7 +267,10 @@ pub async fn upload_image_bytes(
     let creds = &creds_resp.credentials;
 
     // Step 3
-    let cos_host = format!("{}.cos.{}.myqcloud.com", upload_info.bucket, upload_info.region);
+    let cos_host = format!(
+        "{}.cos.{}.myqcloud.com",
+        upload_info.bucket, upload_info.region
+    );
     put_to_cos(client, creds, &cos_host, &returned_key, bytes, mimetype).await?;
 
     // Step 4
@@ -323,7 +326,10 @@ pub async fn upload_video_bytes(
     )
     .await?;
     let creds = &creds_resp.credentials;
-    let cos_host = format!("{}.cos.{}.myqcloud.com", upload_info.bucket, upload_info.region);
+    let cos_host = format!(
+        "{}.cos.{}.myqcloud.com",
+        upload_info.bucket, upload_info.region
+    );
     put_to_cos(client, creds, &cos_host, &returned_key, bytes, mimetype).await?;
     let cb = callback(client, std::slice::from_ref(&returned_key)).await?;
     tracing::debug!(preview_urls = ?cb.preview_urls, "视频上传回调完成");

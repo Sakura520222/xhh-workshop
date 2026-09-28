@@ -1,0 +1,16 @@
+{
+  "app": {
+    "windows": [
+      {
+        "title": "黑盒工坊",
+        "width": 1300,
+        "height": 860,
+        "minWidth": 1000,
+        "minHeight": 700,
+        "decorations": false,
+        "center": true,
+        "transparent": true
+      }
+    ]
+  }
+}

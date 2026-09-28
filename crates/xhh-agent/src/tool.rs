@@ -665,8 +665,16 @@ impl Tool for FavouriteTool {
         let link_id = arg_id(&v, "link_id");
         let folder_id = arg_id(&v, "folder_id");
         let favour_type = v.get("favour_type").and_then(|t| t.as_i64()).unwrap_or(1);
-        let action = if favour_type == 2 { "取消收藏" } else { "收藏" };
-        let id_disp = if link_id.is_empty() { "未提供 ID".to_string() } else { link_id };
+        let action = if favour_type == 2 {
+            "取消收藏"
+        } else {
+            "收藏"
+        };
+        let id_disp = if link_id.is_empty() {
+            "未提供 ID".to_string()
+        } else {
+            link_id
+        };
         let target = if folder_id.is_empty() {
             format!("帖子 {}", id_disp)
         } else {
@@ -694,7 +702,11 @@ impl Tool for FavouriteTool {
                 msg: "link_id 不能为空".into(),
             });
         }
-        let folder = if folder_id.is_empty() { None } else { Some(folder_id.as_str()) };
+        let folder = if folder_id.is_empty() {
+            None
+        } else {
+            Some(folder_id.as_str())
+        };
         let result = if favour_type == 2 {
             api_inter::unfavourite(client, &link_id, folder).await
         } else {
@@ -704,7 +716,11 @@ impl Tool for FavouriteTool {
             tool: self.name().into(),
             msg: e.to_string(),
         })?;
-        let msg = if favour_type == 2 { "取消收藏成功" } else { "收藏成功" };
+        let msg = if favour_type == 2 {
+            "取消收藏成功"
+        } else {
+            "收藏成功"
+        };
         Ok(json!({"ok": true, "message": msg}).to_string())
     }
 }
@@ -783,7 +799,14 @@ impl Tool for CreateFavouriteFolderTool {
         ToolConfirmation {
             tool_name: self.name(),
             risk_level: RiskLevel::Medium,
-            summary: format!("创建收藏夹「{}」", if name.is_empty() { "未提供名称" } else { name }),
+            summary: format!(
+                "创建收藏夹「{}」",
+                if name.is_empty() {
+                    "未提供名称"
+                } else {
+                    name
+                }
+            ),
             arguments_json: arguments_json.to_string(),
         }
     }
@@ -809,7 +832,8 @@ impl Tool for CreateFavouriteFolderTool {
                 "name": folder.get("name"),
                 "count": folder.get("count"),
             }
-        }).to_string())
+        })
+        .to_string())
     }
 }
 
@@ -848,7 +872,11 @@ impl Tool for DeleteFavouriteFolderTool {
             risk_level: RiskLevel::High,
             summary: format!(
                 "删除收藏夹 {}。此操作不可逆",
-                if folder_id.is_empty() { "未提供 ID" } else { folder_id }
+                if folder_id.is_empty() {
+                    "未提供 ID"
+                } else {
+                    folder_id
+                }
             ),
             arguments_json: arguments_json.to_string(),
         }
@@ -871,7 +899,8 @@ impl Tool for DeleteFavouriteFolderTool {
             "ok": resp.get("status").and_then(|s| s.as_str()) == Some("ok"),
             "folder_id": folder_id,
             "message": "收藏夹已删除"
-        }).to_string())
+        })
+        .to_string())
     }
 }
 
@@ -911,7 +940,11 @@ impl Tool for ListFavouriteLinksTool {
         let folder_id = v.get("folder_id").and_then(|s| s.as_str()).unwrap_or("");
         let offset = v.get("offset").and_then(|n| n.as_u64()).unwrap_or(0) as u32;
         let limit = v.get("limit").and_then(|n| n.as_u64()).unwrap_or(30) as u32;
-        let folder = if folder_id.is_empty() { None } else { Some(folder_id) };
+        let folder = if folder_id.is_empty() {
+            None
+        } else {
+            Some(folder_id)
+        };
         let resp = api_inter::favourite_folder_links(client, folder, offset, limit).await?;
         let links = resp
             .pointer("/result/links")
@@ -924,7 +957,10 @@ impl Tool for ListFavouriteLinksTool {
             .map(String::from)
             .unwrap_or_default();
         let list: Vec<Value> = links.iter().map(map_fav_link).collect();
-        Ok(json!({"count": list.len(), "posts": list, "offset": offset, "has_next": has_next}).to_string())
+        Ok(
+            json!({"count": list.len(), "posts": list, "offset": offset, "has_next": has_next})
+                .to_string(),
+        )
     }
 }
 
@@ -1040,7 +1076,8 @@ impl Tool for ListUncategorizedFavouriteLinksTool {
         for fid in &folder_ids {
             let mut fo: u32 = 0;
             loop {
-                let resp = api_inter::favourite_folder_links(client, Some(fid.as_str()), fo, 30).await?;
+                let resp =
+                    api_inter::favourite_folder_links(client, Some(fid.as_str()), fo, 30).await?;
                 let links = resp
                     .pointer("/result/links")
                     .and_then(|a| a.as_array())
@@ -1116,7 +1153,11 @@ impl Tool for MoveFavouriteTool {
         let v = parsed_args(arguments_json);
         let link_id = arg_id(&v, "link_id");
         let folder_id = arg_id(&v, "folder_id");
-        let id_disp = if link_id.is_empty() { "未提供 ID".to_string() } else { link_id };
+        let id_disp = if link_id.is_empty() {
+            "未提供 ID".to_string()
+        } else {
+            link_id
+        };
         ToolConfirmation {
             tool_name: self.name(),
             risk_level: RiskLevel::Medium,

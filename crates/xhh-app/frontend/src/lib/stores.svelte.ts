@@ -254,7 +254,9 @@ function loadPersistedWindowEffect(): WindowEffect {
 }
 
 function applyWindowEffectAttr(effect: WindowEffect) {
-  document.documentElement.dataset.windowEffect = effect;
+  // 窗口效果仅 Windows 生效；其他平台强制 none，避免半透明背景露出桌面
+  const value: WindowEffect = navigator.userAgent.includes("Windows") ? effect : "none";
+  document.documentElement.dataset.windowEffect = value;
 }
 
 // 模块加载时立即应用，避免首屏背景闪烁

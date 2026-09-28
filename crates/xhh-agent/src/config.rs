@@ -147,7 +147,11 @@ impl AgentConfig {
                     } else {
                         c.base_url.clone()
                     },
-                    timeout_secs: if c.timeout_secs == 0 { 120 } else { c.timeout_secs },
+                    timeout_secs: if c.timeout_secs == 0 {
+                        120
+                    } else {
+                        c.timeout_secs
+                    },
                 }))
             }
             "anthropic" | "claude" => {
@@ -172,7 +176,11 @@ impl AgentConfig {
                     } else {
                         c.max_tokens
                     },
-                    timeout_secs: if c.timeout_secs == 0 { 120 } else { c.timeout_secs },
+                    timeout_secs: if c.timeout_secs == 0 {
+                        120
+                    } else {
+                        c.timeout_secs
+                    },
                 }))
             }
             "ollama" => {
@@ -191,7 +199,11 @@ impl AgentConfig {
                     } else {
                         c.base_url.clone()
                     },
-                    timeout_secs: if c.timeout_secs == 0 { 600 } else { c.timeout_secs },
+                    timeout_secs: if c.timeout_secs == 0 {
+                        600
+                    } else {
+                        c.timeout_secs
+                    },
                 }))
             }
             other => Err(Error::Config(format!(

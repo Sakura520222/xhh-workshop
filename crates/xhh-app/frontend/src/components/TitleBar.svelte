@@ -2,10 +2,11 @@
   let { onMinimize, onMaximize, onClose }: { onMinimize: () => void; onMaximize: () => void; onClose: () => void } = $props();
 </script>
 
-<header class="titlebar" data-tauri-drag-region>
-  <div class="left" data-tauri-drag-region>
+<!-- deep：整棵子树可拖拽（按钮等可交互元素自动豁免）；裸属性只对直接命中的元素生效，点在 logo 上会失效 -->
+<header class="titlebar" data-tauri-drag-region="deep">
+  <div class="left">
     <img class="brand-mark" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABDklEQVR4nO1XUQrDIAw1wVP0c+yvbODuf4YWVvo39tlrbGRMcE6jxm4yukCpqHnPxJdaldq6Qaiz6463TxEuy/mFE75FHFuIljiP/SnYb+ahGAtbRO/yoSTiUKR+XyxLvmEueS5gqQ9wW1BCyllMGyTEaAbWIk9hYWxAomgJlk455pactDSRHWUWVkqUvYDRiSQUlZsVervt0CJSeOBXAScYl4DmHS7XR3va797GcjDYKuDMkhMxPdSWVg2qxqYlTpTGidmC6gyYeWAFZQVnt8AXZi4eGfsp5gBr51aL0DepCME2/ofRTxxGhvnaxcaqDyPzBCjJSIkPSH5K1/orFpfhmgatLyaotn43VK3tDtnCqranOWRYAAAAAElFTkSuQmCC" alt="" />
-    <div class="brand-copy" data-tauri-drag-region>
+    <div class="brand-copy">
       <span class="logo">黑盒工坊</span>
     </div>
   </div>

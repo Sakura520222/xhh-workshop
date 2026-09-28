@@ -177,7 +177,10 @@ pub async fn community_feeds(
 pub async fn topic_menu(client: &XhhClient, topic_id: u32) -> Result<Value> {
     tracing::debug!(topic_id = topic_id, "获取社区菜单");
     client
-        .get("/bbs/app/topic/menu", &[("topic_id", &topic_id.to_string())])
+        .get(
+            "/bbs/app/topic/menu",
+            &[("topic_id", &topic_id.to_string())],
+        )
         .await
 }
 

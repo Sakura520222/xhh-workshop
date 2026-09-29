@@ -236,6 +236,7 @@ pub async fn feeds_list(
 /// 仅首屏请求（`is_first == 1`）命中本地缓存以加速浏览与离线查看；
 /// `force` 为真时跳过缓存读取并回写最新数据（用于手动刷新）。
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn post_detail(
     state: State<'_, AppState>,
     link_id: String,
@@ -598,19 +599,20 @@ pub async fn like_post(
         .map_err(|e| e.to_string())
 }
 
-/// 评论点赞（toggle）
+/// 评论点赞 / 取消（support_type: 1=点赞, 2=取消，默认 1；调用方按 is_support 判断）
 #[tauri::command]
 pub async fn like_comment(
     state: State<'_, AppState>,
     comment_id: String,
+    support_type: Option<i64>,
 ) -> Result<serde_json::Value, String> {
     let c = state.require_client().await?;
-    api_inter::toggle_like_comment(&c, &comment_id)
+    api_inter::like_comment(&c, &comment_id, support_type.unwrap_or(1))
         .await
         .map_err(|e| e.to_string())
 }
 
-/// 收藏 / 取消收藏（favour_type: 2=收藏, 1=取消）
+/// 收藏 / 取消收藏（favour_type: 1=收藏, 2=取消；取消时不带 folder_id）
 #[tauri::command]
 pub async fn favourite(
     state: State<'_, AppState>,
@@ -620,7 +622,7 @@ pub async fn favourite(
 ) -> Result<serde_json::Value, String> {
     let c = state.require_client().await?;
     let result = if favour_type.unwrap_or(1) == 2 {
-        api_inter::unfavourite(&c, &link_id, folder_id.as_deref()).await
+        api_inter::unfavourite(&c, &link_id).await
     } else {
         api_inter::favourite(&c, &link_id, folder_id.as_deref()).await
     };
@@ -2950,14 +2952,15 @@ pub async fn delete_favourite_folder(
 
 // ─── Follow / User ────────────────────────────────────────
 
-/// 关注用户
+/// 关注用户（link_id 为来源帖子上下文，可选）
 #[tauri::command]
 pub async fn follow_user(
     state: State<'_, AppState>,
     userid: String,
+    link_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let c = state.require_client().await?;
-    api_user::follow_user(&c, &userid)
+    api_user::follow_user(&c, &userid, link_id.as_deref())
         .await
         .map_err(|e| e.to_string())
 }

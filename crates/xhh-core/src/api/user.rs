@@ -54,18 +54,27 @@ pub async fn follower_list(
 }
 
 /// 关注用户
-pub async fn follow_user(client: &XhhClient, userid: &str) -> Result<Value> {
-    tracing::info!(userid = %userid, "关注用户");
+///
+/// 2026-09-29 抓包：Web v3.0 body 为 `following_id`（目标用户）+ `link_id`（来源帖子上下文）。
+pub async fn follow_user(client: &XhhClient, userid: &str, link_id: Option<&str>) -> Result<Value> {
+    tracing::info!(userid = %userid, link_id = ?link_id, "关注用户");
     let mut body = BTreeMap::new();
-    body.insert("userid".into(), userid.into());
+    body.insert("following_id".into(), userid.into());
+    if let Some(lid) = link_id {
+        if !lid.is_empty() {
+            body.insert("link_id".into(), lid.into());
+        }
+    }
     client.post(PATH_FOLLOW, &body, 0).await
 }
 
 /// 取关用户
+///
+/// 端点 `/bbs/app/profile/follow/user/cancel`（取自 Web v3.0 JS）。
 pub async fn unfollow_user(client: &XhhClient, userid: &str) -> Result<Value> {
     tracing::info!(userid = %userid, "取关用户");
     let mut body = BTreeMap::new();
-    body.insert("userid".into(), userid.into());
+    body.insert("following_id".into(), userid.into());
     client.post(PATH_UNFOLLOW, &body, 0).await
 }
 

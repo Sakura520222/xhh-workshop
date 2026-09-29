@@ -447,6 +447,13 @@
   }
 
   let auth = $derived(getAuth());
+  // 详情接口的点赞状态字段是 is_up（1=已赞），兼容 feeds 的 is_award_link
+  let postLiked = $derived(
+    post?.is_up === 1 ||
+      post?.is_up === true ||
+      post?.is_award_link === 1 ||
+      post?.is_award_link === true,
+  );
   // 仅帖子作者本人可见编辑入口
   let isOwner = $derived(
     !!post && !!auth.heybox_id && String(post.userid ?? "") === String(auth.heybox_id),
@@ -553,8 +560,7 @@
 
   async function handleLikePost() {
     try {
-      const liked = post?.is_award_link === 1 || post?.is_award_link === true;
-      await likePost(linkId, liked ? 0 : 1);
+      await likePost(linkId, postLiked ? 0 : 1);
       await refresh();
     } catch (e) {
       console.error(e);
@@ -578,7 +584,7 @@
     target.comment.up = (target.comment.up ?? 0) + (wasLiked ? -1 : 1);
     floors = floors;
     try {
-      await likeComment(commentId);
+      await likeComment(commentId, wasLiked ? 2 : 1);
     } catch (e) {
       target.comment.is_support = wasLiked ? 1 : 2;
       target.comment.up = (target.comment.up ?? 0) + (wasLiked ? 1 : -1);
@@ -746,7 +752,8 @@
     if (favBusy || !linkId) return;
     favBusy = true;
     try {
-      await favourite(linkId, lastFolderId || undefined, 2);
+      // 取消收藏不带 folder_id，效果为从全部收藏夹移除
+      await favourite(linkId, undefined, 2);
       clearFavState(linkId);
       toastInfo("已取消收藏");
       closeFavPanel();
@@ -1005,8 +1012,8 @@
       {/if}
 
       <div class="post-actions">
-        <button class="action-btn" class:liked={post?.is_award_link === 1} onclick={handleLikePost}>
-          {post?.is_award_link === 1 ? "已赞" : "点赞"} {post?.link_award_num ?? 0}
+        <button class="action-btn" class:liked={postLiked} onclick={handleLikePost}>
+          {postLiked ? "已赞" : "点赞"} {post?.link_award_num ?? 0}
         </button>
         <button class="action-btn" class:faved={localFaved} onclick={openFavPanel} disabled={favBusy}>
           {localFaved ? "已收藏" : "收藏"}

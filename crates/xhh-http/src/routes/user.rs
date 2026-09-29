@@ -70,6 +70,8 @@ pub async fn follower(
 #[derive(Debug, Deserialize)]
 pub struct UseridReq {
     pub userid: String,
+    /// 关注时的来源帖子上下文（Web 端会附带，可选）
+    pub link_id: Option<String>,
 }
 
 /// POST /api/user/follow
@@ -78,7 +80,7 @@ pub async fn follow(
     Json(req): Json<UseridReq>,
 ) -> ApiResult<Json<Value>> {
     let c = state.require_client().await?;
-    let v = follow_user(&c, &req.userid).await?;
+    let v = follow_user(&c, &req.userid, req.link_id.as_deref()).await?;
     Ok(Json(v))
 }
 

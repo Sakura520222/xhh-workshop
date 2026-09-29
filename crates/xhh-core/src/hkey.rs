@@ -155,17 +155,56 @@ pub fn now_ts() -> i64 {
 /// 返回 `Vec<(String, String)>`，便于 reqwest 的 `query()` 或
 /// `form_urlencoded` 直接消费。
 ///
+/// 参数集对齐 Web v3.0 实测（2026-09-29 抓包）：不再发送
+/// `device_id` / `device_info` / `_notip`，新增空值 `x_client_version`，
+/// `x_os_type` 按运行平台取值，`app` 固定为 `heybox`。
+///
 /// - `reqpath`: 请求路径
-/// - `heybox_id`: 用户 ID（登录前为空字符串）
-/// - `device_id`: 设备指纹
+/// - `heybox_id`: 用户 ID
 /// - `offset`: hkey 时间戳偏移
-/// - `app`: 应用标识，默认 `web`，话题搜索需传 `heybox`
-pub fn build_query_params(
+pub fn build_query_params(reqpath: &str, heybox_id: &str, offset: i64) -> Vec<(String, String)> {
+    let timestamp = now_ts();
+    let nonce = get_nonce(timestamp);
+    let hkey = generate_hkey(reqpath, timestamp, &nonce, offset);
+
+    // 服务端只接受 Mac / Windows（实测传 Linux 会被以"缺少必要参数 [x_os_type]"
+    // 拒绝），Linux 平台沿用旧版固定上报 Windows 的行为
+    let x_os_type = if cfg!(target_os = "macos") {
+        "Mac"
+    } else {
+        "Windows"
+    };
+
+    let mut params: Vec<(String, String)> = vec![
+        ("app".into(), "heybox".into()),
+        ("os_type".into(), "web".into()),
+        ("x_app".into(), "heybox_website".into()),
+        ("x_client_type".into(), "web".into()),
+        ("x_os_type".into(), x_os_type.into()),
+        ("x_client_version".into(), String::new()),
+        ("client_type".into(), "web".into()),
+        ("web_version".into(), "3.0".into()),
+        ("version".into(), "999.0.4".into()),
+        ("hkey".into(), hkey),
+        ("_time".into(), timestamp.to_string()),
+        ("nonce".into(), nonce),
+    ];
+    if !heybox_id.is_empty() {
+        params.push(("heybox_id".into(), heybox_id.into()));
+    }
+    params
+}
+
+/// 构建 v2.5 旧版通用 query 参数（含 hkey 签名）
+///
+/// `account/*` 认证端点仍按旧契约校验：2026-09-29 实测，扫码流程使用
+/// 新参数集时确认后 `qr_state` 不下发凭据（卡在"等待点击登录"），
+/// 旧参数集全流程正常。仅扫码登录相关接口使用本函数。
+pub fn build_query_params_legacy(
     reqpath: &str,
     heybox_id: &str,
     device_id: &str,
     offset: i64,
-    app: &str,
 ) -> Vec<(String, String)> {
     let timestamp = now_ts();
     let nonce = get_nonce(timestamp);
@@ -173,7 +212,7 @@ pub fn build_query_params(
 
     let mut params: Vec<(String, String)> = vec![
         ("os_type".into(), "web".into()),
-        ("app".into(), app.into()),
+        ("app".into(), "web".into()),
         ("client_type".into(), "web".into()),
         ("version".into(), "999.0.4".into()),
         ("web_version".into(), "2.5".into()),
@@ -300,8 +339,75 @@ mod tests {
     }
 
     #[test]
+    fn regression_award_link() {
+        // 2026-09-29 网页实测：点赞请求 /bbs/app/profile/award/link
+        let hkey = generate_hkey(
+            "/bbs/app/profile/award/link",
+            1790618334,
+            "B9AEF39C567E0A484C07536666A28E87",
+            0,
+        );
+        assert_eq!(hkey, "SSSYP27");
+    }
+
+    #[test]
+    fn regression_link_favour() {
+        // 2026-09-29 网页实测：收藏请求 /bbs/app/link/favour
+        let hkey = generate_hkey(
+            "/bbs/app/link/favour",
+            1790618539,
+            "1D1AE26D83CAD163EEB7D517CA0BDEC9",
+            0,
+        );
+        assert_eq!(hkey, "0VD0V71");
+    }
+
+    #[test]
     fn build_query_params_contains_required_keys() {
-        let params = build_query_params("/bbs/app/feeds", "123", "dev", 0, "web");
+        let params = build_query_params("/bbs/app/feeds", "123", 0);
+        let keys: std::collections::HashSet<&str> =
+            params.iter().map(|(k, _)| k.as_str()).collect();
+        for required in [
+            "app",
+            "os_type",
+            "x_app",
+            "x_client_type",
+            "x_os_type",
+            "x_client_version",
+            "client_type",
+            "web_version",
+            "version",
+            "hkey",
+            "_time",
+            "nonce",
+            "heybox_id",
+        ] {
+            assert!(keys.contains(required), "缺少 query 参数 {}", required);
+        }
+        for removed in ["device_id", "device_info", "_notip"] {
+            assert!(!keys.contains(removed), "不应再发送 {}", removed);
+        }
+        let app = params.iter().find(|(k, _)| k == "app").unwrap();
+        assert_eq!(app.1, "heybox");
+        let web_version = params.iter().find(|(k, _)| k == "web_version").unwrap();
+        assert_eq!(web_version.1, "3.0");
+        let x_os_type = params.iter().find(|(k, _)| k == "x_os_type").unwrap();
+        assert!(
+            x_os_type.1 == "Mac" || x_os_type.1 == "Windows",
+            "x_os_type 只能为 Mac/Windows，实际 {}",
+            x_os_type.1
+        );
+    }
+
+    #[test]
+    fn build_query_params_omits_empty_heybox_id() {
+        let params = build_query_params("/account/get_qrcode_url/", "", 0);
+        assert!(params.iter().find(|(k, _)| k == "heybox_id").is_none());
+    }
+
+    #[test]
+    fn build_query_params_legacy_keeps_v25_set() {
+        let params = build_query_params_legacy("/account/qr_state/", "", "dev", 0);
         let keys: std::collections::HashSet<&str> =
             params.iter().map(|(k, _)| k.as_str()).collect();
         for required in [
@@ -319,15 +425,14 @@ mod tests {
             "_time",
             "nonce",
             "_notip",
-            "heybox_id",
         ] {
             assert!(keys.contains(required), "缺少 query 参数 {}", required);
         }
-    }
-
-    #[test]
-    fn build_query_params_omits_empty_heybox_id() {
-        let params = build_query_params("/account/get_qrcode_url/", "", "dev", 0, "web");
-        assert!(params.iter().find(|(k, _)| k == "heybox_id").is_none());
+        let app = params.iter().find(|(k, _)| k == "app").unwrap();
+        assert_eq!(app.1, "web");
+        let web_version = params.iter().find(|(k, _)| k == "web_version").unwrap();
+        assert_eq!(web_version.1, "2.5");
+        let x_os_type = params.iter().find(|(k, _)| k == "x_os_type").unwrap();
+        assert_eq!(x_os_type.1, "Windows");
     }
 }

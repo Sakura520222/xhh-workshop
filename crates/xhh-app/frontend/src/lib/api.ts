@@ -118,11 +118,13 @@ export const subComments = (root_comment_id: string, lastval?: string): Promise<
   invoke("sub_comments", { rootCommentId: root_comment_id, lastval: lastval ?? "" });
 
 // Interaction
+// 帖子点赞为显式操作：award_type=1 点赞，0 取消（按 is_award_link / is_up 判断）
 export const likePost = (link_id: string, award_type: number): Promise<any> =>
   invoke("like_post", { linkId: link_id, awardType: award_type });
 
-export const likeComment = (comment_id: string): Promise<any> =>
-  invoke("like_comment", { commentId: comment_id });
+// 评论点赞为显式操作：support_type=1 点赞，2 取消（按 is_support 判断，1=已赞 2=未赞）
+export const likeComment = (comment_id: string, support_type: number): Promise<any> =>
+  invoke("like_comment", { commentId: comment_id, supportType: support_type });
 
 export const favourite = (link_id: string, folder_id: string | undefined, favour_type: number): Promise<any> =>
   invoke("favourite", { linkId: link_id, folderId: folder_id, favourType: favour_type });
@@ -380,8 +382,8 @@ export const favourFolder = (folderId?: string, offset?: number, limit?: number)
   invoke("favour_folder", { folderId, offset: offset ?? 0, limit: limit ?? 30 });
 
 // Follow
-export const followUser = (userid: string): Promise<any> =>
-  invoke("follow_user", { userid });
+export const followUser = (userid: string, link_id?: string): Promise<any> =>
+  invoke("follow_user", { userid, linkId: link_id ?? null });
 
 export const unfollowUser = (userid: string): Promise<any> =>
   invoke("unfollow_user", { userid });

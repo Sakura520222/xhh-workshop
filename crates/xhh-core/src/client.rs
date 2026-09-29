@@ -111,18 +111,63 @@ impl XhhClient {
         body: Option<&BTreeMap<String, String>>,
         extra_query: &[(&str, &str)],
     ) -> Result<Value> {
-        tracing::debug!(method = %method, path = %path, offset = offset, "HTTP 请求");
-
-        let app = if path.contains("/post_editor/topic_selection/") {
-            "heybox"
-        } else {
-            "web"
-        };
-
-        let mut params = build_query_params(path, &self.heybox_id, &self.device_id, offset, app);
+        let mut params = build_query_params(path, &self.heybox_id, offset);
         for (k, v) in extra_query {
             params.push((k.to_string(), v.to_string()));
         }
+        self.send(method, path, params, body).await
+    }
+
+    /// 旧版（v2.5）参数集请求，仅用于 `account/*` 认证端点
+    ///
+    /// 2026-09-29 实测：认证端点按旧契约校验参数，扫码流程走新版参数集
+    /// 会在确认后拿不到凭据。
+    pub async fn request_legacy(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<&BTreeMap<String, String>>,
+        extra_query: &[(&str, &str)],
+    ) -> Result<Value> {
+        let mut params =
+            crate::hkey::build_query_params_legacy(path, &self.heybox_id, &self.device_id, 0);
+        for (k, v) in extra_query {
+            params.push((k.to_string(), v.to_string()));
+        }
+        self.send(method, path, params, body).await
+    }
+
+    /// 简单 GET 请求（offset=0, 无 body）
+    pub async fn get(&self, path: &str, extra_query: &[(&str, &str)]) -> Result<Value> {
+        self.request(Method::GET, path, 0, None, extra_query).await
+    }
+
+    /// 旧版参数集 GET（认证端点用）
+    pub async fn get_legacy(&self, path: &str, extra_query: &[(&str, &str)]) -> Result<Value> {
+        self.request_legacy(Method::GET, path, None, extra_query)
+            .await
+    }
+
+    /// 简单 POST 请求
+    pub async fn post(
+        &self,
+        path: &str,
+        body: &BTreeMap<String, String>,
+        offset: i64,
+    ) -> Result<Value> {
+        self.request(Method::POST, path, offset, Some(body), &[])
+            .await
+    }
+
+    /// 实际发送：构造 URL、注入签名 query / Cookie / Headers
+    async fn send(
+        &self,
+        method: Method,
+        path: &str,
+        params: Vec<(String, String)>,
+        body: Option<&BTreeMap<String, String>>,
+    ) -> Result<Value> {
+        tracing::debug!(method = %method, path = %path, "HTTP 请求");
 
         let url = format!("{}{}", crate::BASE_URL, path);
 
@@ -163,22 +208,6 @@ impl XhhClient {
         let value: Value = resp.json().await?;
         tracing::debug!(path = %path, status = %status, "HTTP 响应成功");
         Ok(value)
-    }
-
-    /// 简单 GET 请求（offset=0, 无 body）
-    pub async fn get(&self, path: &str, extra_query: &[(&str, &str)]) -> Result<Value> {
-        self.request(Method::GET, path, 0, None, extra_query).await
-    }
-
-    /// 简单 POST 请求
-    pub async fn post(
-        &self,
-        path: &str,
-        body: &BTreeMap<String, String>,
-        offset: i64,
-    ) -> Result<Value> {
-        self.request(Method::POST, path, offset, Some(body), &[])
-            .await
     }
 }
 

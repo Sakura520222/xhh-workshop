@@ -6,8 +6,8 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use xhh_core::api::interaction::{
-    create_favourite_folder, favourite, favourite_folders, like_post as api_like_post,
-    toggle_like_comment, unfavourite,
+    create_favourite_folder, favourite, favourite_folders, like_comment as api_like_comment,
+    like_post as api_like_post, unfavourite,
 };
 
 use crate::error::{ApiError, ApiResult};
@@ -33,6 +33,8 @@ pub async fn like_post(
 #[derive(Debug, Deserialize)]
 pub struct CommentIdReq {
     pub comment_id: String,
+    /// 评论点赞：1=点赞, 2=取消，默认 1
+    pub support_type: Option<i64>,
 }
 
 /// POST /api/like/comment
@@ -41,7 +43,7 @@ pub async fn like_comment(
     Json(req): Json<CommentIdReq>,
 ) -> ApiResult<Json<Value>> {
     let c = state.require_client().await?;
-    let v = toggle_like_comment(&c, &req.comment_id).await?;
+    let v = api_like_comment(&c, &req.comment_id, req.support_type.unwrap_or(1)).await?;
     Ok(Json(v))
 }
 
@@ -49,7 +51,7 @@ pub async fn like_comment(
 pub struct FavourReq {
     pub link_id: String,
     pub folder_id: Option<String>,
-    /// 2=收藏（默认）, 1=取消
+    /// 收藏操作：1=收藏（默认）, 2=取消（取消时不带 folder_id，从全部收藏夹移除）
     pub favour_type: Option<i64>,
 }
 
@@ -60,7 +62,7 @@ pub async fn favour(
 ) -> ApiResult<Json<Value>> {
     let c = state.require_client().await?;
     let v = if req.favour_type.unwrap_or(1) == 2 {
-        unfavourite(&c, &req.link_id, req.folder_id.as_deref()).await?
+        unfavourite(&c, &req.link_id).await?
     } else {
         favourite(&c, &req.link_id, req.folder_id.as_deref()).await?
     };

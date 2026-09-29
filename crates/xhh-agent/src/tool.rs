@@ -636,7 +636,7 @@ impl Tool for FavouriteTool {
     fn spec(&self) -> ToolSpec {
         ToolSpec::new(
             "favourite",
-            "收藏或取消收藏帖子。favour_type=1 收藏（folder_id 指定收藏夹，省略为默认收藏夹）；favour_type=2 取消收藏（folder_id 指定从哪个收藏夹移除）。",
+            "收藏或取消收藏帖子。favour_type=1 收藏（folder_id 指定收藏夹，省略为默认收藏夹）；favour_type=2 取消收藏（会从全部收藏夹移除，folder_id 无效）。",
             json!({
                 "type": "object",
                 "properties": {
@@ -648,7 +648,7 @@ impl Tool for FavouriteTool {
                     },
                     "folder_id": {
                         "type": "string",
-                        "description": "（可选）收藏夹 ID"
+                        "description": "（可选）收藏夹 ID，仅收藏时有效"
                     }
                 },
                 "required": ["link_id", "favour_type"]
@@ -708,7 +708,7 @@ impl Tool for FavouriteTool {
             Some(folder_id.as_str())
         };
         let result = if favour_type == 2 {
-            api_inter::unfavourite(client, &link_id, folder).await
+            api_inter::unfavourite(client, &link_id).await
         } else {
             api_inter::favourite(client, &link_id, folder).await
         };
@@ -1179,11 +1179,11 @@ impl Tool for MoveFavouriteTool {
                 msg: "link_id 和 folder_id 不能为空".into(),
             });
         }
-        api_inter::unfavourite(client, &link_id, None)
+        api_inter::unfavourite(client, &link_id)
             .await
             .map_err(|e| Error::ToolCall {
                 tool: self.name().into(),
-                msg: format!("取消默认夹失败: {}", e),
+                msg: format!("取消收藏失败: {}", e),
             })?;
         api_inter::favourite(client, &link_id, Some(folder_id.as_str()))
             .await
@@ -1538,7 +1538,7 @@ impl Tool for DeleteCommentTool {
     }
 }
 
-/// 评论点赞/取消点赞（toggle）
+/// 评论点赞/取消点赞（显式操作）
 pub struct LikeCommentTool;
 
 #[async_trait]
@@ -1550,11 +1550,12 @@ impl Tool for LikeCommentTool {
     fn spec(&self) -> ToolSpec {
         ToolSpec::new(
             "like_comment",
-            "点赞某条评论（toggle 切换式：已赞则取消，未赞则赞）。",
+            "点赞某条评论。默认点赞；cancel=true 时取消点赞。",
             json!({
                 "type": "object",
                 "properties": {
-                    "comment_id": {"type": "string", "description": "目标评论 ID"}
+                    "comment_id": {"type": "string", "description": "目标评论 ID"},
+                    "cancel": {"type": "boolean", "description": "（可选）true=取消点赞，默认 false"}
                 },
                 "required": ["comment_id"]
             }),
@@ -1568,11 +1569,13 @@ impl Tool for LikeCommentTool {
     fn confirmation(&self, arguments_json: &str) -> ToolConfirmation {
         let v = parsed_args(arguments_json);
         let cid = arg_str(&v, "comment_id");
+        let cancel = v.get("cancel").and_then(|b| b.as_bool()).unwrap_or(false);
         ToolConfirmation {
             tool_name: self.name(),
             risk_level: RiskLevel::Medium,
             summary: format!(
-                "切换评论 {} 的点赞状态",
+                "{}评论 {} 的点赞",
+                if cancel { "取消" } else { "" },
                 if cid.is_empty() { "未提供 ID" } else { cid }
             ),
             arguments_json: arguments_json.to_string(),
@@ -1582,8 +1585,9 @@ impl Tool for LikeCommentTool {
     async fn execute(&self, client: &XhhClient, args: &str) -> Result<String> {
         let v: Value = serde_json::from_str(args)?;
         let cid = v.get("comment_id").and_then(|s| s.as_str()).unwrap_or("");
-        let resp = api_inter::toggle_like_comment(client, cid).await?;
-        Ok(json!({"ok": resp.get("status").and_then(|s| s.as_str()) == Some("ok"), "message": "评论点赞切换"}).to_string())
+        let cancel = v.get("cancel").and_then(|b| b.as_bool()).unwrap_or(false);
+        let resp = api_inter::like_comment(client, cid, if cancel { 2 } else { 1 }).await?;
+        Ok(json!({"ok": resp.get("status").and_then(|s| s.as_str()) == Some("ok"), "message": if cancel { "评论取消点赞" } else { "评论点赞" }}).to_string())
     }
 }
 

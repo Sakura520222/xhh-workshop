@@ -367,9 +367,9 @@ async fn run(cli: Cli) -> Result<()> {
 
         Cmd::LikeComment { comment_id } => {
             let c = build_client(&cfg_path)?;
-            let v = api_inter::toggle_like_comment(&c, &comment_id).await?;
+            let v = api_inter::like_comment(&c, &comment_id, 1).await?;
             println!(
-                "评论点赞切换: {}",
+                "评论点赞: {}",
                 v.get("status").and_then(|s| s.as_str()).unwrap_or("?")
             );
         }

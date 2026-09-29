@@ -122,7 +122,7 @@ impl AgentSessions {
                 message_count: s.ui_messages.len() as u32,
             })
             .collect();
-        items.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        items.sort_by_key(|a| std::cmp::Reverse(a.updated_at));
         items
     }
 }

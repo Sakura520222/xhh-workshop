@@ -16,7 +16,7 @@ use crate::client::XhhClient;
 use crate::config::Config;
 use crate::crypto::generate_token_id;
 use crate::error::{Error, Result};
-use crate::hkey::build_query_params;
+use crate::hkey::build_query_params_legacy;
 
 /// 扫码登录返回的二维码信息
 #[derive(Debug, Clone, serde::Serialize)]
@@ -61,7 +61,7 @@ pub struct QrLoginSuccess {
 pub async fn get_qr_code(client: &XhhClient) -> Result<QrCodeResp> {
     let path = "/account/get_qrcode_url/";
     tracing::debug!(path = %path, "获取二维码");
-    let value = client.get(path, &[]).await?;
+    let value = client.get_legacy(path, &[]).await?;
 
     if value.get("status").and_then(|v| v.as_str()) != Some("ok") {
         tracing::warn!(response = %value, "获取二维码失败");
@@ -105,7 +105,7 @@ pub async fn poll_qr_state_once(
     device_id: &str,
 ) -> Result<QrPollResult> {
     let path = "/account/qr_state/";
-    let params = build_query_params(path, "", device_id, 0, "web");
+    let params = build_query_params_legacy(path, "", device_id, 0);
     let url = format!(
         "{}{}?{}&{}",
         crate::BASE_URL,

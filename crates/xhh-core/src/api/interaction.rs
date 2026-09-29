@@ -2,7 +2,10 @@
 //!
 //!
 //! 帖子点赞为**显式操作**（award_type=1 点赞 / 0 取消），调用方需根据 `is_award_link` 判断状态。
-//! 评论点赞为**切换式**（toggle）；收藏为**显式操作**（favour_type=2 收藏 / 1 取消），字段 link_id + userid + folder_id。
+//! 评论点赞为**显式操作**（support_type=1 点赞 / 2 取消），调用方需根据 `is_support`（1=已赞，2=未赞）判断状态。
+//! 收藏为**显式操作**（favour_type=1 收藏 / 2 取消），取消时仅传 link_id（全部取消）。
+//!
+//! 以上语义均经 2026-09-29 Web v3.0 抓包复核。
 
 use std::collections::BTreeMap;
 
@@ -31,12 +34,19 @@ pub async fn like_post(client: &XhhClient, link_id: &str, award_type: i64) -> Re
     client.post(PATH_LIKE_POST, &body, 0).await
 }
 
-/// 评论点赞 / 取消点赞（toggle，support_type=2）
-pub async fn toggle_like_comment(client: &XhhClient, comment_id: &str) -> Result<Value> {
-    tracing::info!(comment_id = %comment_id, "评论点赞切换");
+/// 评论点赞 / 取消点赞（显式操作，非切换）
+///
+/// - `support_type=1` 点赞，`support_type=2` 取消点赞
+/// - 调用方需根据评论的 `is_support` 字段判断当前状态后传入
+pub async fn like_comment(
+    client: &XhhClient,
+    comment_id: &str,
+    support_type: i64,
+) -> Result<Value> {
+    tracing::info!(comment_id = %comment_id, support_type = support_type, "评论点赞");
     let mut body = BTreeMap::new();
     body.insert("comment_id".into(), comment_id.into());
-    body.insert("support_type".into(), "2".into());
+    body.insert("support_type".into(), support_type.to_string());
     client.post(PATH_LIKE_COMMENT, &body, 0).await
 }
 
@@ -53,16 +63,13 @@ pub async fn favourite(
 
 /// 取消收藏（favour_type=2）
 ///
-/// `folder_id` 指定从哪个收藏夹取消。
-pub async fn unfavourite(
-    client: &XhhClient,
-    link_id: &str,
-    folder_id: Option<&str>,
-) -> Result<Value> {
-    favourite_link(client, link_id, 2, folder_id).await
+/// 与 Web v3.0 一致：取消时不带 folder_id，效果为从全部收藏夹移除。
+pub async fn unfavourite(client: &XhhClient, link_id: &str) -> Result<Value> {
+    favourite_link(client, link_id, 2, None).await
 }
 
-/// 收藏/取消收藏底层（favour_type: 1=收藏, 2=取消；字段名来自 Web 端实测验证）
+/// 收藏/取消收藏底层（favour_type: 1=收藏, 2=取消；2026-09-29 抓包确认，
+/// Web v3.0 不发送 userid，取消时不带 folder_id）
 async fn favourite_link(
     client: &XhhClient,
     link_id: &str,
@@ -72,7 +79,6 @@ async fn favourite_link(
     let mut body = BTreeMap::new();
     body.insert("favour_type".into(), favour_type.to_string());
     body.insert("link_id".into(), link_id.into());
-    body.insert("userid".into(), client.heybox_id.clone());
     if let Some(fid) = folder_id {
         if !fid.is_empty() {
             body.insert("folder_id".into(), fid.into());

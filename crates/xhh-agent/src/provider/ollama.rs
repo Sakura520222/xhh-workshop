@@ -46,6 +46,43 @@ impl OllamaProvider {
     }
 }
 
+/// 拉取本地模型列表（GET /api/tags），按名称排序
+pub async fn list_models(base_url: &str, timeout_secs: u64) -> Result<Vec<String>> {
+    let url = format!("{}/api/tags", base_url.trim().trim_end_matches('/'));
+    let client = Client::builder()
+        .timeout(Duration::from_secs(if timeout_secs == 0 {
+            30
+        } else {
+            timeout_secs
+        }))
+        .build()?;
+    let resp = client.get(&url).send().await?;
+    let status = resp.status();
+    let text = resp.text().await?;
+    if !status.is_success() {
+        return Err(Error::Provider(format!(
+            "Ollama HTTP {} - {}",
+            status,
+            truncate(&text, 300)
+        )));
+    }
+    let v: Value = serde_json::from_str(&text)?;
+    let arr = v.get("models").and_then(|m| m.as_array()).ok_or_else(|| {
+        Error::Provider(format!("响应缺少 models 字段: {}", truncate(&text, 200)))
+    })?;
+    let mut models: Vec<String> = arr
+        .iter()
+        .filter_map(|m| {
+            m.get("name")
+                .and_then(|n| n.as_str())
+                .or_else(|| m.get("model").and_then(|n| n.as_str()))
+                .map(String::from)
+        })
+        .collect();
+    models.sort();
+    Ok(models)
+}
+
 #[async_trait]
 impl LlmProvider for OllamaProvider {
     fn name(&self) -> &str {

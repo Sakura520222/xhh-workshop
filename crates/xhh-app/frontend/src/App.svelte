@@ -14,6 +14,7 @@
   import UserView from "./views/UserView.svelte";
  import TitleBar from "./components/TitleBar.svelte";
  import Sidebar from "./components/Sidebar.svelte";
+  import ResizeEdges from "./components/ResizeEdges.svelte";
   import ToastHost from "./components/ToastHost.svelte";
  import { getAuth, getView, refreshAuth, isAuthChecking } from "./lib/stores.svelte";
   import { startPolling, stopPolling } from "./lib/notification.svelte";
@@ -51,6 +52,8 @@
 </script>
 
 <TitleBar onMinimize={handleMinimize} onMaximize={handleMaximize} onClose={handleClose} />
+
+<ResizeEdges />
 
 <ToastHost />
 

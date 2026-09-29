@@ -868,6 +868,30 @@ pub async fn agent_save_config(config: serde_json::Value) -> Result<(), String> 
     cfg.save(None).map_err(|e| e.to_string())
 }
 
+/// 拉取模型列表（设置页 Model 输入框建议值）
+#[tauri::command]
+pub async fn agent_list_models(
+    provider: String,
+    api_key: String,
+    base_url: String,
+    timeout_secs: u64,
+) -> Result<Vec<String>, String> {
+    match provider.as_str() {
+        "openai" => xhh_agent::provider::openai::list_models(&api_key, &base_url, timeout_secs)
+            .await
+            .map_err(|e| e.to_string()),
+        "anthropic" => {
+            xhh_agent::provider::anthropic::list_models(&api_key, &base_url, timeout_secs)
+                .await
+                .map_err(|e| e.to_string())
+        }
+        "ollama" => xhh_agent::provider::ollama::list_models(&base_url, timeout_secs)
+            .await
+            .map_err(|e| e.to_string()),
+        other => Err(format!("未知 provider: {}", other)),
+    }
+}
+
 // ─── AI Cache ─────────────────────────────────────────────
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

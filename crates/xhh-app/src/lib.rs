@@ -88,6 +88,7 @@ pub fn run() {
             commands::agent_reset,
             commands::agent_get_config,
             commands::agent_save_config,
+            commands::agent_list_models,
             // agent sessions
             commands::agent_session_list,
             commands::agent_session_active,

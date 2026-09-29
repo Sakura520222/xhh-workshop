@@ -3,6 +3,7 @@
   import {
     agentGetConfig,
     agentSaveConfig,
+    agentListModels,
     windowEffectGet,
     windowEffectSet,
     cacheGetConfig,
@@ -44,6 +45,11 @@
   // 通用
   let maxLoops = $state(8);
   let temperature = $state("");
+
+  // 模型列表拉取
+  let modelOptions = $state<string[]>([]);
+  let fetchingModels = $state(false);
+  let modelFetchError = $state("");
 
   // 窗口效果
   let windowEffect = $state<WindowEffect>("mica");
@@ -217,6 +223,47 @@
     }
   }
 
+  function switchProvider(key: ProviderKey) {
+    if (activeProvider === key) return;
+    activeProvider = key;
+    modelOptions = [];
+    modelFetchError = "";
+  }
+
+  function currentFormValues() {
+    if (activeProvider === "openai") {
+      return { apiKey: openaiKey, baseUrl: openaiBaseUrl, timeoutSecs: openaiTimeout };
+    }
+    if (activeProvider === "anthropic") {
+      return { apiKey: anthropicKey, baseUrl: anthropicBaseUrl, timeoutSecs: anthropicTimeout };
+    }
+    return { apiKey: "", baseUrl: ollamaBaseUrl, timeoutSecs: ollamaTimeout };
+  }
+
+  async function fetchModels() {
+    if (fetchingModels) return;
+    fetchingModels = true;
+    modelFetchError = "";
+    try {
+      const { apiKey, baseUrl, timeoutSecs } = currentFormValues();
+      const models = await agentListModels(activeProvider, apiKey, baseUrl, timeoutSecs);
+      modelOptions = models;
+      if (!models.length) {
+        modelFetchError = "接口未返回任何模型";
+      } else if (activeProvider === "openai" && !openaiModel) {
+        openaiModel = models[0];
+      } else if (activeProvider === "anthropic" && !anthropicModel) {
+        anthropicModel = models[0];
+      } else if (activeProvider === "ollama" && !ollamaModel) {
+        ollamaModel = models[0];
+      }
+    } catch (e) {
+      modelFetchError = String(e);
+    } finally {
+      fetchingModels = false;
+    }
+  }
+
   onMount(load);
 </script>
 
@@ -366,12 +413,18 @@
               type="button"
               class="tab"
               class:active={activeProvider === p.key}
-              onclick={() => { activeProvider = p.key; }}
+              onclick={() => switchProvider(p.key)}
             >
               {p.label}
             </button>
           {/each}
         </div>
+
+        <datalist id="model-options">
+          {#each modelOptions as m}
+            <option value={m}></option>
+          {/each}
+        </datalist>
 
         {#if activeProvider === "openai"}
           <div class="field-group">
@@ -380,11 +433,22 @@
           </div>
           <div class="field-group">
             <label class="label" for="openai-model">Model</label>
-            <input id="openai-model" type="text" bind:value={openaiModel} class="input" placeholder="gpt-4o-mini" />
+            <div class="model-row">
+              <input id="openai-model" type="text" bind:value={openaiModel} class="input" placeholder="gpt-4o-mini" list="model-options" />
+              <button type="button" class="fetch-btn" onclick={fetchModels} disabled={fetchingModels}>
+                {fetchingModels ? "获取中..." : "获取列表"}
+              </button>
+            </div>
+            {#if modelFetchError}
+              <span class="model-error">{modelFetchError}</span>
+            {:else if modelOptions.length}
+              <span class="field-hint">已获取 {modelOptions.length} 个模型，点击输入框选择</span>
+            {/if}
           </div>
           <div class="field-group">
             <label class="label" for="openai-base-url">Base URL</label>
             <input id="openai-base-url" type="text" bind:value={openaiBaseUrl} class="input" placeholder="https://api.openai.com/v1" />
+            <span class="field-hint">填到域名即可，未带 /v1 时自动补全；已含版本号路径则原样保留</span>
           </div>
           <div class="field-group">
             <label class="label" for="openai-timeout">超时（秒，0 用默认 120）</label>
@@ -397,11 +461,22 @@
           </div>
           <div class="field-group">
             <label class="label" for="anthropic-model">Model</label>
-            <input id="anthropic-model" type="text" bind:value={anthropicModel} class="input" placeholder="claude-haiku-4-5-20251001" />
+            <div class="model-row">
+              <input id="anthropic-model" type="text" bind:value={anthropicModel} class="input" placeholder="claude-haiku-4-5-20251001" list="model-options" />
+              <button type="button" class="fetch-btn" onclick={fetchModels} disabled={fetchingModels}>
+                {fetchingModels ? "获取中..." : "获取列表"}
+              </button>
+            </div>
+            {#if modelFetchError}
+              <span class="model-error">{modelFetchError}</span>
+            {:else if modelOptions.length}
+              <span class="field-hint">已获取 {modelOptions.length} 个模型，点击输入框选择</span>
+            {/if}
           </div>
           <div class="field-group">
             <label class="label" for="anthropic-base-url">Base URL</label>
             <input id="anthropic-base-url" type="text" bind:value={anthropicBaseUrl} class="input" placeholder="https://api.anthropic.com" />
+            <span class="field-hint">填到域名即可，末尾多余的 /v1 会自动去掉</span>
           </div>
           <div class="field-group">
             <label class="label" for="anthropic-max-tokens">Max Tokens</label>
@@ -414,7 +489,17 @@
         {:else if activeProvider === "ollama"}
           <div class="field-group">
             <label class="label" for="ollama-model">Model</label>
-            <input id="ollama-model" type="text" bind:value={ollamaModel} class="input" placeholder="qwen2.5:14b" />
+            <div class="model-row">
+              <input id="ollama-model" type="text" bind:value={ollamaModel} class="input" placeholder="qwen2.5:14b" list="model-options" />
+              <button type="button" class="fetch-btn" onclick={fetchModels} disabled={fetchingModels}>
+                {fetchingModels ? "获取中..." : "获取列表"}
+              </button>
+            </div>
+            {#if modelFetchError}
+              <span class="model-error">{modelFetchError}</span>
+            {:else if modelOptions.length}
+              <span class="field-hint">已获取 {modelOptions.length} 个模型，点击输入框选择</span>
+            {/if}
           </div>
           <div class="field-group">
             <label class="label" for="ollama-base-url">Base URL</label>
@@ -727,6 +812,42 @@
   .input::placeholder {
     color: var(--text-secondary);
     opacity: 0.5;
+  }
+  .model-row {
+    display: flex;
+    gap: 8px;
+  }
+  .model-row .input {
+    flex: 1;
+  }
+  .fetch-btn {
+    padding: 0 16px;
+    border-radius: 10px;
+    background: var(--fill-hover);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+    border: 0.5px solid var(--border);
+    white-space: nowrap;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  .fetch-btn:hover:not(:disabled) {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .fetch-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .field-hint {
+    font-size: 12px;
+    color: var(--text-secondary);
+    opacity: 0.85;
+  }
+  .model-error {
+    font-size: 12px;
+    color: var(--danger);
   }
   .actions {
     display: flex;

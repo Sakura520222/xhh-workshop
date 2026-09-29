@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
+use crate::provider::anthropic::normalize_base_url as anthropic_normalize;
+use crate::provider::openai::normalize_base_url as openai_normalize;
 use crate::provider::{AnthropicConfig, OllamaConfig, OpenAiConfig};
 
 /// Agent 配置（持久化到 ~/.xiaoheihe/agent.json）
@@ -142,11 +144,8 @@ impl AgentConfig {
                     } else {
                         c.model.clone()
                     },
-                    base_url: if c.base_url.is_empty() {
-                        "https://api.openai.com/v1".into()
-                    } else {
-                        c.base_url.clone()
-                    },
+                    // 空串由 normalize 回退官方默认，缺 /v1 时自动补全
+                    base_url: openai_normalize(&c.base_url),
                     timeout_secs: if c.timeout_secs == 0 {
                         120
                     } else {
@@ -166,11 +165,8 @@ impl AgentConfig {
                     } else {
                         c.model.clone()
                     },
-                    base_url: if c.base_url.is_empty() {
-                        "https://api.anthropic.com".into()
-                    } else {
-                        c.base_url.clone()
-                    },
+                    // 剥掉多余的 /v1 段，URL 构建时统一补
+                    base_url: anthropic_normalize(&c.base_url),
                     max_tokens: if c.max_tokens == 0 {
                         4096
                     } else {

@@ -158,6 +158,14 @@ export const agentGetConfig = (): Promise<any> => invoke("agent_get_config");
 export const agentSaveConfig = (config: any): Promise<void> =>
   invoke("agent_save_config", { config });
 
+export const agentListModels = (
+  provider: string,
+  apiKey: string,
+  baseUrl: string,
+  timeoutSecs: number
+): Promise<string[]> =>
+  invoke("agent_list_models", { provider, apiKey, baseUrl, timeoutSecs });
+
 export const agentAutoPost = (intent: string, hashtags: string[] = []): Promise<AgentResult> =>
   invoke("agent_auto_post", { intent, hashtags });
 

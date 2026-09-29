@@ -16,6 +16,7 @@ use crate::provider::{ChatMessage, ChatResponse, LlmProvider, Role, ToolCall, To
 
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 const DEFAULT_TIMEOUT_SECS: u64 = 120;
+const LIST_MODELS_TIMEOUT_SECS: u64 = 30;
 
 /// Anthropic Claude 配置
 #[derive(Debug, Clone)]
@@ -50,11 +51,71 @@ impl AnthropicProvider {
         if cfg.api_key.is_empty() {
             return Err(Error::Config("Anthropic api_key 不能为空".into()));
         }
+        let base_url = normalize_base_url(&cfg.base_url);
         let client = Client::builder()
             .timeout(Duration::from_secs(cfg.timeout_secs))
             .build()?;
-        Ok(Self { cfg, client })
+        Ok(Self {
+            cfg: AnthropicConfig { base_url, ..cfg },
+            client,
+        })
     }
+}
+
+/// 规范化 base_url：去掉首尾空白与结尾斜杠；末段若已是版本号则剥掉，避免拼 `/v1/messages` 时重复
+pub fn normalize_base_url(url: &str) -> String {
+    let trimmed = url.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        return AnthropicConfig::default().base_url;
+    }
+    let seg = trimmed.rsplit('/').next().unwrap_or("");
+    let ver = seg.strip_prefix('v').unwrap_or("");
+    if !ver.is_empty() && ver.chars().all(|c| c.is_ascii_digit()) {
+        return trimmed[..trimmed.len() - seg.len()]
+            .trim_end_matches('/')
+            .to_string();
+    }
+    trimmed.to_string()
+}
+
+/// 拉取模型列表（GET /v1/models），按字母序返回
+pub async fn list_models(api_key: &str, base_url: &str, timeout_secs: u64) -> Result<Vec<String>> {
+    let url = format!("{}/v1/models", normalize_base_url(base_url));
+    let client = Client::builder()
+        .timeout(Duration::from_secs(if timeout_secs == 0 {
+            LIST_MODELS_TIMEOUT_SECS
+        } else {
+            timeout_secs
+        }))
+        .build()?;
+    let resp = client
+        .get(&url)
+        .header("x-api-key", api_key)
+        .header("anthropic-version", ANTHROPIC_API_VERSION)
+        .send()
+        .await?;
+    let status = resp.status();
+    let text = resp.text().await?;
+    if !status.is_success() {
+        return Err(Error::Provider(format!(
+            "Anthropic HTTP {} - {}",
+            status,
+            truncate(&text, 300)
+        )));
+    }
+    let v: Value = serde_json::from_str(&text)?;
+    let mut models: Vec<String> = v
+        .get("data")
+        .and_then(|d| d.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| m.get("id").and_then(|id| id.as_str()))
+                .map(String::from)
+                .collect()
+        })
+        .ok_or_else(|| Error::Provider(format!("响应缺少 data 字段: {}", truncate(&text, 200))))?;
+    models.sort();
+    Ok(models)
 }
 
 #[async_trait]

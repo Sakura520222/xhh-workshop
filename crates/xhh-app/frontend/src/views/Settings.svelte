@@ -12,6 +12,7 @@
     cacheClear,
   } from "../lib/api";
   import type { WindowEffect, CacheStats } from "../lib/api";
+  import ModelField from "../components/ModelField.svelte";
   import { getTheme, setTheme, THEMES, setWindowEffectAttr, getColorMode, setColorMode } from "../lib/stores.svelte";
 
   type ProviderKey = "openai" | "anthropic" | "ollama";
@@ -246,16 +247,9 @@
     modelFetchError = "";
     try {
       const { apiKey, baseUrl, timeoutSecs } = currentFormValues();
-      const models = await agentListModels(activeProvider, apiKey, baseUrl, timeoutSecs);
-      modelOptions = models;
-      if (!models.length) {
+      modelOptions = await agentListModels(activeProvider, apiKey, baseUrl, timeoutSecs);
+      if (!modelOptions.length) {
         modelFetchError = "接口未返回任何模型";
-      } else if (activeProvider === "openai" && !openaiModel) {
-        openaiModel = models[0];
-      } else if (activeProvider === "anthropic" && !anthropicModel) {
-        anthropicModel = models[0];
-      } else if (activeProvider === "ollama" && !ollamaModel) {
-        ollamaModel = models[0];
       }
     } catch (e) {
       modelFetchError = String(e);
@@ -420,31 +414,21 @@
           {/each}
         </div>
 
-        <datalist id="model-options">
-          {#each modelOptions as m}
-            <option value={m}></option>
-          {/each}
-        </datalist>
-
         {#if activeProvider === "openai"}
           <div class="field-group">
             <label class="label" for="openai-key">API Key</label>
             <input id="openai-key" type="password" bind:value={openaiKey} class="input" placeholder="sk-..." />
           </div>
-          <div class="field-group">
-            <label class="label" for="openai-model">Model</label>
-            <div class="model-row">
-              <input id="openai-model" type="text" bind:value={openaiModel} class="input" placeholder="gpt-4o-mini" list="model-options" />
-              <button type="button" class="fetch-btn" onclick={fetchModels} disabled={fetchingModels}>
-                {fetchingModels ? "获取中..." : "获取列表"}
-              </button>
-            </div>
-            {#if modelFetchError}
-              <span class="model-error">{modelFetchError}</span>
-            {:else if modelOptions.length}
-              <span class="field-hint">已获取 {modelOptions.length} 个模型，点击输入框选择</span>
-            {/if}
-          </div>
+          <ModelField
+            id="openai-model"
+            label="Model"
+            placeholder="gpt-4o-mini"
+            bind:value={openaiModel}
+            options={modelOptions}
+            fetching={fetchingModels}
+            error={modelFetchError}
+            onfetch={fetchModels}
+          />
           <div class="field-group">
             <label class="label" for="openai-base-url">Base URL</label>
             <input id="openai-base-url" type="text" bind:value={openaiBaseUrl} class="input" placeholder="https://api.openai.com/v1" />
@@ -459,20 +443,16 @@
             <label class="label" for="anthropic-key">API Key</label>
             <input id="anthropic-key" type="password" bind:value={anthropicKey} class="input" placeholder="sk-ant-..." />
           </div>
-          <div class="field-group">
-            <label class="label" for="anthropic-model">Model</label>
-            <div class="model-row">
-              <input id="anthropic-model" type="text" bind:value={anthropicModel} class="input" placeholder="claude-haiku-4-5-20251001" list="model-options" />
-              <button type="button" class="fetch-btn" onclick={fetchModels} disabled={fetchingModels}>
-                {fetchingModels ? "获取中..." : "获取列表"}
-              </button>
-            </div>
-            {#if modelFetchError}
-              <span class="model-error">{modelFetchError}</span>
-            {:else if modelOptions.length}
-              <span class="field-hint">已获取 {modelOptions.length} 个模型，点击输入框选择</span>
-            {/if}
-          </div>
+          <ModelField
+            id="anthropic-model"
+            label="Model"
+            placeholder="claude-haiku-4-5-20251001"
+            bind:value={anthropicModel}
+            options={modelOptions}
+            fetching={fetchingModels}
+            error={modelFetchError}
+            onfetch={fetchModels}
+          />
           <div class="field-group">
             <label class="label" for="anthropic-base-url">Base URL</label>
             <input id="anthropic-base-url" type="text" bind:value={anthropicBaseUrl} class="input" placeholder="https://api.anthropic.com" />
@@ -487,20 +467,16 @@
             <input id="anthropic-timeout" type="number" bind:value={anthropicTimeout} class="input" placeholder="120" min="0" />
           </div>
         {:else if activeProvider === "ollama"}
-          <div class="field-group">
-            <label class="label" for="ollama-model">Model</label>
-            <div class="model-row">
-              <input id="ollama-model" type="text" bind:value={ollamaModel} class="input" placeholder="qwen2.5:14b" list="model-options" />
-              <button type="button" class="fetch-btn" onclick={fetchModels} disabled={fetchingModels}>
-                {fetchingModels ? "获取中..." : "获取列表"}
-              </button>
-            </div>
-            {#if modelFetchError}
-              <span class="model-error">{modelFetchError}</span>
-            {:else if modelOptions.length}
-              <span class="field-hint">已获取 {modelOptions.length} 个模型，点击输入框选择</span>
-            {/if}
-          </div>
+          <ModelField
+            id="ollama-model"
+            label="Model"
+            placeholder="qwen2.5:14b"
+            bind:value={ollamaModel}
+            options={modelOptions}
+            fetching={fetchingModels}
+            error={modelFetchError}
+            onfetch={fetchModels}
+          />
           <div class="field-group">
             <label class="label" for="ollama-base-url">Base URL</label>
             <input id="ollama-base-url" type="text" bind:value={ollamaBaseUrl} class="input" placeholder="http://localhost:11434" />
@@ -813,41 +789,10 @@
     color: var(--text-secondary);
     opacity: 0.5;
   }
-  .model-row {
-    display: flex;
-    gap: 8px;
-  }
-  .model-row .input {
-    flex: 1;
-  }
-  .fetch-btn {
-    padding: 0 16px;
-    border-radius: 10px;
-    background: var(--fill-hover);
-    color: var(--text);
-    font-size: 13px;
-    font-weight: 500;
-    border: 0.5px solid var(--border);
-    white-space: nowrap;
-    transition: all var(--duration-fast) var(--ease-out);
-  }
-  .fetch-btn:hover:not(:disabled) {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: #fff;
-  }
-  .fetch-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
   .field-hint {
     font-size: 12px;
     color: var(--text-secondary);
     opacity: 0.85;
-  }
-  .model-error {
-    font-size: 12px;
-    color: var(--danger);
   }
   .actions {
     display: flex;
